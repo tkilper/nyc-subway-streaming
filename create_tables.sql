@@ -1,20 +1,20 @@
 create table vehicle_positions (
-    id VARCHAR
-    vehicle.trip.trip_id
-    vehicle.trip.route_id
-    vehicle.trip.start_time
-    vehicle.trip.start_date
-    vehicle.stop_id
-    vehicle.timestamp
+    id TEXT,
+    vehicle.trip.trip_id TEXT,
+    vehicle.trip.route_id TEXT,
+    vehicle.trip.start_time TEXT,
+    vehicle.trip.start_date TEXT,
+    vehicle.stop_id TEXT,
+    vehicle.timestamp BIGINT
 )
 
 create table trip_updates (
-    id VARCHAR
-    trip_update.trip.trip_id
-    trip_update.trip.route_id
-    trip_update.trip.start_time
-    trip_update.trip.start_date
-    trip_update.stop_time_update.stop_id
-    trip_update.stop_time_update.arrival
-    trip_update.stop_time_update.departure
+    id TEXT,
+    trip_update.trip.trip_id TEXT,
+    trip_update.trip.route_id TEXT,
+    trip_update.trip.start_time TEXT,
+    trip_update.trip.start_date TEXT,
+    trip_update.stop_time_update.stop_id TEXT,
+    trip_update.stop_time_update.arrival.time BIGINT,
+    trip_update.stop_time_update.departure.time BIGINT
 )
