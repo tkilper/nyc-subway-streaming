@@ -13,9 +13,10 @@ try:
 
     feed = gtfs_realtime_pb2.FeedMessage()
     feed.ParseFromString(response.content)
+    print(type(feed.entity[0]))
     count = 0
     # datatype: <class gtfs_realtime_pb2.FeedEntity>
-    for entity in feed.entity:
+    """for entity in feed.entity:
         #if entity.HasField('trip_update'):
         print(f'entry {count} start:')
         fields = entity.ListFields()
@@ -23,7 +24,7 @@ try:
             print(f"{tup[0].name}, ({tup[1]})")
         print(f'entry {count} end:')
         count+=1
-    print(f"number of records ingested: {count}")
+    print(f"number of records ingested: {count}")"""
 
 except requests.exceptions.RequestException as e:
     print(f"Error: {e}")
