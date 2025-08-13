@@ -1,11 +1,11 @@
 create table processed_vehicle (
     id TEXT,
-    vehicle.trip.trip_id TEXT,
-    vehicle.trip.route_id TEXT,
-    vehicle.trip.start_time TEXT,
-    vehicle.trip.start_date TEXT,
-    vehicle.stop_id TEXT,
-    vehicle.timestamp BIGINT
+    trip_id TEXT,
+    route_id TEXT,
+    start_time TEXT,
+    start_date TEXT,
+    stop_id TEXT,
+    timestamp BIGINT
 )
 
 create table processed_updates (

@@ -7,12 +7,12 @@ def create_processed_events_sink_postgres(t_env):
     sink_ddl = f"""
         CREATE TABLE {table_name} (
             id TEXT,
-            vehicle.trip.trip_id TEXT,
-            vehicle.trip.route_id TEXT,
-            vehicle.trip.start_time TEXT,
-            vehicle.trip.start_date TEXT,
-            vehicle.stop_id TEXT,
-            vehicle.timestamp BIGINT
+            trip_id TEXT,
+            route_id TEXT,
+            start_time TEXT,
+            start_date TEXT,
+            stop_id TEXT,
+            ts BIGINT
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -32,12 +32,12 @@ def create_events_source_kafka(t_env):
     source_ddl = f"""
         CREATE TABLE {table_name} (
             id TEXT,
-            vehicle.trip.trip_id TEXT,
-            vehicle.trip.route_id TEXT,
-            vehicle.trip.start_time TEXT,
-            vehicle.trip.start_date TEXT,
-            vehicle.stop_id TEXT,
-            vehicle.timestamp BIGINT,
+            trip_id TEXT,
+            route_id TEXT,
+            start_time TEXT,
+            start_date TEXT,
+            stop_id TEXT,
+            ts BIGINT,
             event_watermark AS TO_TIMESTAMP_LTZ(event_timestamp, 3),
             WATERMARK for event_watermark as event_watermark - INTERVAL '5' SECOND
         ) WITH (
@@ -71,12 +71,12 @@ def log_processing():
                     INSERT INTO {postgres_sink}
                     SELECT
                         id as record_id,
-                        vehicle.trip.trip_id as trip_id,
-                        vehicle.trip.route_id as route_id,
-                        vehicle.trip.start_time as trip_start_time,
-                        vehicle.trip.start_date as trip_start_date,
-                        vehicle.stop_id as stop_id,
-                        vehicle.timestamp as timestamp
+                        trip_id,
+                        route_id,
+                        start_time as trip_start_time,
+                        start_date as trip_start_date,
+                        stop_id,
+                        ts
                     FROM {source_table}
                     """
         ).wait()
