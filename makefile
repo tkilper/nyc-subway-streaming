@@ -43,8 +43,8 @@ down:
 
 .PHONY: job
 ## Submit the Flink job
-job:
-	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/start_job.py --pyFiles /opt/src -d
+vehicle_job:
+	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/insert_job_vehicle.py --pyFiles /opt/src -d
 
 aggregation_job:
 	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/aggregation_job.py --pyFiles /opt/src -d

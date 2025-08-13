@@ -3,7 +3,7 @@ from pyflink.table import EnvironmentSettings, DataTypes, TableEnvironment, Stre
 
 
 def create_processed_events_sink_postgres(t_env):
-    table_name = 'processed_events'
+    table_name = 'processed_vehicle'
     sink_ddl = f"""
         CREATE TABLE {table_name} (
             id TEXT,
@@ -43,10 +43,10 @@ def create_events_source_kafka(t_env):
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'test-topic',
+            'topic' = 'vehicle-data',
             'scan.startup.mode' = 'latest-offset',
             'properties.auto.offset.reset' = 'latest',
-            'format' = 'json'
+            'format' = 'proto'
         );
         """
     t_env.execute_sql(source_ddl)
@@ -83,7 +83,6 @@ def log_processing():
 
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
-
 
 if __name__ == '__main__':
     log_processing()

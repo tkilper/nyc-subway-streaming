@@ -3,11 +3,17 @@ from pyflink.table import EnvironmentSettings, DataTypes, TableEnvironment, Stre
 
 
 def create_processed_events_sink_postgres(t_env):
-    table_name = 'processed_events'
+    table_name = 'processed_updates'
     sink_ddl = f"""
         CREATE TABLE {table_name} (
-            test_data INTEGER,
-            event_timestamp TIMESTAMP
+            id TEXT,
+            trip_update.trip.trip_id TEXT,
+            trip_update.trip.route_id TEXT,
+            trip_update.trip.start_time TEXT,
+            trip_update.trip.start_date TEXT,
+            trip_update.stop_time_update.stop_id TEXT,
+            trip_update.stop_time_update.arrival.time BIGINT,
+            trip_update.stop_time_update.departure.time BIGINT
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -33,10 +39,10 @@ def create_events_source_kafka(t_env):
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'test-topic',
+            'topic' = 'updates-data',
             'scan.startup.mode' = 'latest-offset',
             'properties.auto.offset.reset' = 'latest',
-            'format' = 'json'
+            'format' = 'proto'
         );
         """
     t_env.execute_sql(source_ddl)
@@ -60,7 +66,14 @@ def log_processing():
             f"""
                     INSERT INTO {postgres_sink}
                     SELECT
-                        test_data,
+                        id TEXT,
+                        trip_update.trip.trip_id TEXT,
+                        trip_update.trip.route_id TEXT,
+                        trip_update.trip.start_time TEXT,
+                        trip_update.trip.start_date TEXT,
+                        trip_update.stop_time_update.stop_id TEXT,
+                        trip_update.stop_time_update.arrival.time BIGINT,
+                        trip_update.stop_time_update.departure.time BIGINT,
                         TO_TIMESTAMP_LTZ(event_timestamp, 3) as event_timestamp
                     FROM {source_table}
                     """
@@ -68,7 +81,6 @@ def log_processing():
 
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
-
 
 if __name__ == '__main__':
     log_processing()

@@ -37,7 +37,7 @@ def create_events_source_kafka(t_env):
             'topic' = 'test-topic',
             'scan.startup.mode' = 'earliest-offset',
             'properties.auto.offset.reset' = 'earliest',
-            'format' = 'json'
+            'format' = 'proto'
         );
         """
     t_env.execute_sql(source_ddl)
@@ -84,7 +84,6 @@ def log_aggregation():
 
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
-
 
 if __name__ == '__main__':
     log_aggregation()

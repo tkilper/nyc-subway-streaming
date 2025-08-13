@@ -1,4 +1,4 @@
-create table vehicle_positions (
+create table processed_vehicle (
     id TEXT,
     vehicle.trip.trip_id TEXT,
     vehicle.trip.route_id TEXT,
@@ -8,7 +8,7 @@ create table vehicle_positions (
     vehicle.timestamp BIGINT
 )
 
-create table trip_updates (
+create table processed_updates (
     id TEXT,
     trip_update.trip.trip_id TEXT,
     trip_update.trip.route_id TEXT,

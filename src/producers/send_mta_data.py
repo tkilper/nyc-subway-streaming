@@ -4,9 +4,6 @@ from kafka import KafkaProducer
 from google.transit import gtfs_realtime_pb2
 
 def main():
-    # Create protobuf serializer
-
-
     # Create a Kafka producer
     feedEntity = gtfs_realtime_pb2.FeedEntity()
     producer = KafkaProducer(
