@@ -6,14 +6,14 @@ def create_processed_events_sink_postgres(t_env):
     table_name = 'processed_updates'
     sink_ddl = f"""
         CREATE TABLE {table_name} (
-            id TEXT,
-            trip_update.trip.trip_id TEXT,
-            trip_update.trip.route_id TEXT,
-            trip_update.trip.start_time TEXT,
-            trip_update.trip.start_date TEXT,
-            trip_update.stop_time_update.stop_id TEXT,
-            trip_update.stop_time_update.arrival.time BIGINT,
-            trip_update.stop_time_update.departure.time BIGINT
+            id VARCHAR,
+            trip_id VARCHAR,
+            route_id VARCHAR,
+            start_time VARCHAR,
+            start_date VARCHAR,
+            stop_id VARCHAR,
+            arrival_time BIGINT,
+            departure_time BIGINT
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -32,8 +32,14 @@ def create_events_source_kafka(t_env):
     pattern = "yyyy-MM-dd HH:mm:ss.SSS"
     source_ddl = f"""
         CREATE TABLE {table_name} (
-            test_data INTEGER,
-            event_timestamp BIGINT,
+            id VARCHAR,
+            trip_id VARCHAR,
+            route_id VARCHAR,
+            start_time VARCHAR,
+            start_date VARCHAR,
+            stop_id VARCHAR,
+            arrival_time BIGINT,
+            departure_time BIGINT,
             event_watermark AS TO_TIMESTAMP_LTZ(event_timestamp, 3),
             WATERMARK for event_watermark as event_watermark - INTERVAL '5' SECOND
         ) WITH (
@@ -66,14 +72,14 @@ def log_processing():
             f"""
                     INSERT INTO {postgres_sink}
                     SELECT
-                        id TEXT,
-                        trip_update.trip.trip_id TEXT,
-                        trip_update.trip.route_id TEXT,
-                        trip_update.trip.start_time TEXT,
-                        trip_update.trip.start_date TEXT,
-                        trip_update.stop_time_update.stop_id TEXT,
-                        trip_update.stop_time_update.arrival.time BIGINT,
-                        trip_update.stop_time_update.departure.time BIGINT,
+                        id,
+                        trip_id,
+                        route_id,
+                        start_time,
+                        start_date,
+                        stop_id,
+                        arrival_time,
+                        departure_time,
                         TO_TIMESTAMP_LTZ(event_timestamp, 3) as event_timestamp
                     FROM {source_table}
                     """

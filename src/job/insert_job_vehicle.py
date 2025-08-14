@@ -6,12 +6,12 @@ def create_processed_events_sink_postgres(t_env):
     table_name = 'processed_vehicle'
     sink_ddl = f"""
         CREATE TABLE {table_name} (
-            id TEXT,
-            trip_id TEXT,
-            route_id TEXT,
-            start_time TEXT,
-            start_date TEXT,
-            stop_id TEXT,
+            id VARCHAR,
+            trip_id VARCHAR,
+            route_id VARCHAR,
+            start_time VARCHAR,
+            start_date VARCHAR,
+            stop_id VARCHAR,
             ts BIGINT
         ) WITH (
             'connector' = 'jdbc',
@@ -31,13 +31,13 @@ def create_events_source_kafka(t_env):
     pattern = "yyyy-MM-dd HH:mm:ss.SSS"
     source_ddl = f"""
         CREATE TABLE {table_name} (
-            id TEXT,
-            trip_id TEXT,
-            route_id TEXT,
-            start_time TEXT,
-            start_date TEXT,
-            stop_id TEXT,
-            ts BIGINT,
+            id VARCHAR,
+            trip_id VARCHAR,
+            route_id VARCHAR,
+            start_time VARCHAR,
+            start_date VARCHAR,
+            stop_id VARCHAR,
+            event_timestamp BIGINT,
             event_watermark AS TO_TIMESTAMP_LTZ(event_timestamp, 3),
             WATERMARK for event_watermark as event_watermark - INTERVAL '5' SECOND
         ) WITH (
@@ -46,7 +46,8 @@ def create_events_source_kafka(t_env):
             'topic' = 'vehicle-data',
             'scan.startup.mode' = 'latest-offset',
             'properties.auto.offset.reset' = 'latest',
-            'format' = 'proto'
+            'format' = 'protobuf',
+            'protobuf.message-class-name' = 'com.google.transit.realtime.transit_realtime.FeedEntity'
         );
         """
     t_env.execute_sql(source_ddl)
@@ -76,7 +77,7 @@ def log_processing():
                         start_time as trip_start_time,
                         start_date as trip_start_date,
                         stop_id,
-                        ts
+                        event_timestamp
                     FROM {source_table}
                     """
         ).wait()
