@@ -32,20 +32,8 @@ RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flin
     wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/1.16.0/flink-connector-jdbc-1.16.0.jar; \
     wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/postgresql/postgresql/42.2.24/postgresql-42.2.24.jar;
 
-# Download and run protobuf compiler
-COPY gtfs-realtime.proto .
-RUN apt-get update && \
-    apt-get install -y protobuf-compiler && \
-    protoc --proto_path=/opt/flink --java_out=/opt/flink /opt/flink/gtfs-realtime.proto
-
-RUN apt-get update && \
-    apt-get install -y openjdk-17-jdk && \
-    rm -rf /var/lib/apt/lists/*
-
-# Compile protobuf generated classes into a jar file 
-RUN cd /opt/flink/com/google/transit/realtime && \
-    javac GtfsRealtime.java && \
-    jar -cf GtfsRealtime.jar GtfsRealtime.class
+COPY /protobuf/GtfsRealtime.jar /opt/flink/lib/
+COPY /protobuf/protobuf-java-4.31.1.jar /opt/flink/lib/
 
 RUN echo "taskmanager.memory.jvm-metaspace.size: 512m" >> /opt/flink/conf/flink-conf.yaml;
 

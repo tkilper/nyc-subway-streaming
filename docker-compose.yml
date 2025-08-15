@@ -49,6 +49,7 @@ services:
       - ./:/opt/flink/usrlib
       - ./keys/:/var/private/ssl/
       - ./src/:/opt/src
+      - ./com/:/opt/flink/lib/com
     command: jobmanager 
     extra_hosts:
       - "host.docker.internal:127.0.0.1" #// Linux
@@ -74,6 +75,7 @@ services:
     volumes:
       - ./:/opt/flink/usrlib
       - ./src/:/opt/src
+      - ./com/:/opt/flink/lib/com
     depends_on:
       - jobmanager
     command: taskmanager --taskmanager.registration.timeout 5 min
