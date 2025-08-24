@@ -7,12 +7,13 @@ def create_processed_events_sink_postgres(t_env):
     sink_ddl = f"""
         CREATE TABLE {table_name} (
             id VARCHAR,
-            trip_id VARCHAR,
-            route_id VARCHAR,
-            start_time VARCHAR,
-            start_date VARCHAR,
-            stop_id VARCHAR,
-            ts BIGINT
+            is_deleted BOOLEAN,
+            `vehicle.trip.trip_id` VARCHAR,
+            `vehicle.trip.route_id` VARCHAR,
+            `vehicle.trip.start_time` VARCHAR,
+            `vehicle.trip.start_date` VARCHAR,
+            `vehicle.stop_id` VARCHAR,
+            `vehicle.timestamp` BIGINT
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -27,23 +28,22 @@ def create_processed_events_sink_postgres(t_env):
 
 
 def create_events_source_kafka(t_env):
-    table_name = "events"
+    table_name = "events_vehicle"
     pattern = "yyyy-MM-dd HH:mm:ss.SSS"
     source_ddl = f"""
         CREATE TABLE {table_name} (
             id VARCHAR,
             is_deleted BOOLEAN,
-            trip_update TripUpdate,
-            vehicle VehiclePosition,
-            alert Alert
+            vehicle ROW<trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>, stop_id VARCHAR, `timestamp` BIGINT>
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda-1:29092',
             'topic' = 'vehicle-data',
-            'scan.startup.mode' = 'latest-offset',
-            'properties.auto.offset.reset' = 'latest',
+            'scan.startup.mode' = 'earliest-offset',
+            'properties.auto.offset.reset' = 'earliest',
             'format' = 'protobuf',
-            'protobuf.message-class-name' = 'GtfsRealtime$FeedEntity'
+            'protobuf.message-class-name' = 'GtfsRealtime$FeedEntity',
+            'protobuf.read-default-values' = 'true'
         );
         """
     t_env.execute_sql(source_ddl)
@@ -69,9 +69,12 @@ def log_processing():
                     SELECT
                         id,
                         is_deleted,
-                        trip_update,
-                        vehicle,
-                        alert
+                        vehicle.trip.trip_id as trip_id,
+                        vehicle.trip.route_id as route_id,
+                        vehicle.trip.start_time as start_time,
+                        vehicle.trip.start_date as start_date,
+                        vehicle.stop_id as stop_id,
+                        vehicle.`timestamp` as event_timestamp
                     FROM {source_table}
                     """
         ).wait()

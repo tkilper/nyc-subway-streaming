@@ -7,13 +7,8 @@ def create_processed_events_sink_postgres(t_env):
     sink_ddl = f"""
         CREATE TABLE {table_name} (
             id VARCHAR,
-            trip_id VARCHAR,
-            route_id VARCHAR,
-            start_time VARCHAR,
-            start_date VARCHAR,
-            stop_id VARCHAR,
-            arrival_time BIGINT,
-            departure_time BIGINT
+            is_deleted BOOLEAN,
+            trip_update ROW<TripDescriptor ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>, StopTimeUpdate ARRAY>
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -33,15 +28,8 @@ def create_events_source_kafka(t_env):
     source_ddl = f"""
         CREATE TABLE {table_name} (
             id VARCHAR,
-            trip_id VARCHAR,
-            route_id VARCHAR,
-            start_time VARCHAR,
-            start_date VARCHAR,
-            stop_id VARCHAR,
-            arrival_time BIGINT,
-            departure_time BIGINT,
-            event_watermark AS TO_TIMESTAMP_LTZ(event_timestamp, 3),
-            WATERMARK for event_watermark as event_watermark - INTERVAL '5' SECOND
+            is_deleted BOOLEAN,
+            trip_update ROW<TripDescriptor ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>, StopTimeUpdate ARRAY>
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda-1:29092',

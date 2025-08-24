@@ -5,10 +5,10 @@ from google.transit import gtfs_realtime_pb2
 
 def main():
     # Create a Kafka producer
-    feedEntity = gtfs_realtime_pb2.FeedEntity()
+    fEntity = gtfs_realtime_pb2.FeedEntity()
     producer = KafkaProducer(
         bootstrap_servers='localhost:9092',
-        value_serializer=lambda v: feedEntity.SerializeToString(v).encode('utf-8')
+        value_serializer=lambda v: v.SerializeToString()
     )
 
     # Pull data from API
