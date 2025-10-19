@@ -1,0 +1,17 @@
+I built a prototype streaming data pipeline for NYMTA trip analytics:
+
+
+
+https://github.com/tkilper/nyc-subway-streaming
+
+
+
+The data is ingested from MTA's free API into Kafka, transformed in real-time using PyFlink, and loaded into a Postgres database from which I'm running calculations for real-time trip schedule visualization and anomaly detection.
+
+
+
+It was tough, but a lot of fun, figuring out this project, and I learned so much.
+
+
+
+Please feel free to take a look and provide any recommendations for improvements or new features if you have them. Thanks for reading!

@@ -36,7 +36,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile.flink
-    image: pyflink:1.16.0
+    image: pyflink:1.20.2
     container_name: "flink-jobmanager"
     pull_policy: never
     platform: "linux/amd64"
@@ -65,7 +65,7 @@ services:
   
   # Flink task manager
   taskmanager:
-    image: pyflink:1.16.0
+    image: pyflink:1.20.2
     container_name: "flink-taskmanager"
     pull_policy: never
     platform: "linux/amd64"

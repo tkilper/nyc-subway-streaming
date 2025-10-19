@@ -20,8 +20,8 @@ feed = gtfs_realtime_pb2.FeedMessage()
 feed.ParseFromString(response.content)
 
 for entity in feed.entity:
-        if entity.HasField('trip_update'):
-            print(entity.id)
+        if entity.HasField('vehicle'):
+            print(entity)
 
 # datatype: <class gtfs_realtime_pb2.FeedEntity>
 """for entity in feed.entity:
