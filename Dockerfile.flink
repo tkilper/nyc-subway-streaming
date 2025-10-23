@@ -16,14 +16,15 @@ RUN python -m pip install --upgrade pip; \
 
 # Download connector libraries
 RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/2.1.0/flink-json-2.1.0.jar; \
-    wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-protobuf/2.1.0/flink-protobuf-2.1.0.jar; \
+    #wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-protobuf/2.1.0/flink-protobuf-2.1.0.jar; \
     wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/4.0.1-2.0/flink-sql-connector-kafka-4.0.1-2.0.jar; \
     wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/3.3.0-1.20/flink-connector-jdbc-3.3.0-1.20.jar; \
     wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar;
 
 COPY /gtfs-protobuf/GtfsRealtime.jar /opt/flink/lib/
-COPY /protobuf/protobuf-java-4.33.0.jar /opt/flink/lib/
-COPY /protobuf/protobuf.jar /opt/flink/lib/
+#COPY /protobuf/protobuf-java-4.33.0.jar /opt/flink/lib/
+#COPY /protobuf/protobuf.jar /opt/flink/lib/
+COPY /protobuf/flink-protobuf.jar /opt/flink/lib/
 
 RUN echo "jobmanager.memory.heap.size: 512m" >> /opt/flink/conf/flink-conf.yaml;
 RUN echo "taskmanager.memory.flink.size: 1024m" >> /opt/flink/conf/flink-conf.yaml;
