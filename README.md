@@ -5,4 +5,4 @@ Hi! This project is my homemade, locally deployed streaming ETL pipeline. It ing
 
 Programming Languages: Python, SQL
 
-Technologies: VS Code, Apache Kafka, Apache Flink, Metabase (Data Visualization), Postgres (Data Warehouse)
+Technologies: VS Code, Apache Kafka, Apache Flink, Postgres (Database)
