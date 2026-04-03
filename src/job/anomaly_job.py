@@ -54,7 +54,7 @@ def create_updates_source_kafka(t_env):
             'scan.startup.mode' = 'earliest-offset',
             'properties.auto.offset.reset' = 'earliest',
             'format' = 'protobuf',
-            'protobuf.message-class-name' = 'GtfsRealtime$FeedEntity',
+            'protobuf.message-class-name' = 'com.google.transit.realtime.GtfsRealtime$FeedEntity',
             'protobuf.read-default-values' = 'true'
         );
         """
@@ -74,7 +74,7 @@ def create_flattened_view(t_env, source_table):
             t.trip_update.trip.start_date,
             stu.stop_sequence,
             stu.stop_id,
-            stu.arrival.delay AS arrival_delay,
+            CASE WHEN stu.arrival IS NOT NULL THEN stu.arrival.delay ELSE 0 END AS arrival_delay,
             t.proc_time
         FROM {source_table} AS t
         CROSS JOIN UNNEST(t.trip_update.stop_time_update) AS stu(

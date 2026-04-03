@@ -1,18 +1,38 @@
-FROM --platform=linux/amd64 flink:1.20.2-scala_2.12-java11
+# ── Stage 1: compile GtfsRealtime.jar ────────────────────────────────────────
+FROM --platform=linux/amd64 eclipse-temurin:11-jdk-jammy AS proto-builder
 
-# install python3: it has updated Python to 3.9 in Debian 11 and so install Python 3.7 from source
-# it currently only supports Python 3.6, 3.7 and 3.8 in PyFlink officially.
+RUN curl -fsSL -o /tmp/protoc \
+      https://repo1.maven.org/maven2/com/google/protobuf/protoc/3.25.3/protoc-3.25.3-linux-x86_64.exe && \
+    chmod +x /tmp/protoc
+
+RUN curl -fsSL -o /tmp/protobuf-java-3.25.3.jar \
+    https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.25.3/protobuf-java-3.25.3.jar
+
+COPY gtfs-protobuf/gtfs-realtime.proto /tmp/gtfs-proto/gtfs-realtime.proto
+
+RUN mkdir -p /tmp/gtfs/src /tmp/gtfs/classes && \
+    /tmp/protoc \
+      --java_out=/tmp/gtfs/src \
+      --proto_path=/tmp/gtfs-proto \
+      /tmp/gtfs-proto/gtfs-realtime.proto && \
+    find /tmp/gtfs/src -name "*.java" \
+      | xargs javac -cp /tmp/protobuf-java-3.25.3.jar -d /tmp/gtfs/classes && \
+    jar cf /tmp/GtfsRealtime.jar -C /tmp/gtfs/classes .
+
+# ── Stage 2: Flink image ──────────────────────────────────────────────────────
+FROM --platform=linux/amd64 flink:1.20.2-scala_2.12-java11
 
 # install python3 and pip3
 RUN apt-get update -y && \
-apt-get install -y python3 python3-pip python3-dev && rm -rf /var/lib/apt/lists/*
+    apt-get install -y python3 python3-pip python3-dev && \
+    rm -rf /var/lib/apt/lists/*
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # install PyFlink
 COPY requirements.txt .
 RUN python -m pip install --upgrade pip; \
     pip3 install --upgrade google-api-python-client; \
-    pip3 install -r requirements.txt  --no-cache-dir;
+    pip3 install -r requirements.txt --no-cache-dir;
 
 # Download connector libraries
 RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/1.20.2/flink-json-1.20.2.jar; \
@@ -24,23 +44,10 @@ RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flin
 # Download protobuf-java 3.25.3 (required by flink-protobuf-1.20.2)
 RUN wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.25.3/protobuf-java-3.25.3.jar
 
-# Regenerate GtfsRealtime.java from the .proto using apt protoc (3.x), then compile against
-# protobuf-java 3.25.3 so the JAR is free of 4.x RuntimeVersion references.
-COPY /gtfs-protobuf/gtfs-realtime.proto /tmp/gtfs-proto/gtfs-realtime.proto
-RUN apt-get update -y && \
-    apt-get install -y protobuf-compiler && \
-    rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /tmp/gtfs/src /tmp/gtfs/classes && \
-    protoc \
-      --java_out=/tmp/gtfs/src \
-      --proto_path=/tmp/gtfs-proto \
-      /tmp/gtfs-proto/gtfs-realtime.proto && \
-    find /tmp/gtfs/src -name "*.java" \
-      | xargs javac -cp /opt/flink/lib/protobuf-java-3.25.3.jar -d /tmp/gtfs/classes && \
-    jar cf /opt/flink/lib/GtfsRealtime.jar -C /tmp/gtfs/classes . && \
-    rm -rf /tmp/gtfs /tmp/gtfs-proto
+# Copy the compiled GtfsRealtime.jar from the builder stage
+COPY --from=proto-builder /tmp/GtfsRealtime.jar /opt/flink/lib/GtfsRealtime.jar
 
-RUN echo "jobmanager.memory.heap.size: 512m" >> /opt/flink/conf/flink-conf.yaml;
-RUN echo "taskmanager.memory.flink.size: 1024m" >> /opt/flink/conf/flink-conf.yaml;
+RUN echo "jobmanager.memory.heap.size: 512m" >> /opt/flink/conf/flink-conf.yaml
+RUN echo "taskmanager.memory.flink.size: 1024m" >> /opt/flink/conf/flink-conf.yaml
 
 WORKDIR /opt/flink

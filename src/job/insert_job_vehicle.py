@@ -49,7 +49,7 @@ def create_events_source_kafka(t_env):
             'scan.startup.mode' = 'earliest-offset',
             'properties.auto.offset.reset' = 'earliest',
             'format' = 'protobuf',
-            'protobuf.message-class-name' = 'GtfsRealtime$FeedEntity',
+            'protobuf.message-class-name' = 'com.google.transit.realtime.GtfsRealtime$FeedEntity',
             'protobuf.read-default-values' = 'true'
         );
         """

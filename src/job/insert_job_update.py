@@ -1,97 +1,99 @@
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.table import EnvironmentSettings, StreamTableEnvironment
+from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
+from pyflink.datastream.connectors.jdbc import (
+    JdbcSink, JdbcConnectionOptions, JdbcExecutionOptions
+)
+from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.typeinfo import Types
+from pyflink.common.watermark_strategy import WatermarkStrategy
+from pyflink.common import Row
 
 
-def create_stop_updates_sink_postgres(t_env):
-    table_name = 'processed_stop_updates'
-    sink_ddl = f"""
-        CREATE TABLE {table_name} (
-            feed_entity_id VARCHAR,
-            trip_id VARCHAR,
-            route_id VARCHAR,
-            start_date VARCHAR,
-            stop_sequence INT,
-            stop_id VARCHAR,
-            arrival_delay INT,
-            arrival_time BIGINT,
-            departure_delay INT,
-            departure_time BIGINT
-        ) WITH (
-            'connector' = 'jdbc',
-            'url' = 'jdbc:postgresql://postgres:5432/postgres',
-            'table-name' = '{table_name}',
-            'username' = 'postgres',
-            'password' = 'postgres',
-            'driver' = 'org.postgresql.Driver'
-        );
-        """
-    t_env.execute_sql(sink_ddl)
-    return table_name
-
-
-def create_events_source_kafka(t_env):
-    table_name = "events_updates"
-    source_ddl = f"""
-        CREATE TABLE {table_name} (
-            id VARCHAR,
-            is_deleted BOOLEAN,
-            trip_update ROW<
-                trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>,
-                stop_time_update ARRAY<ROW<
-                    stop_sequence INT,
-                    stop_id VARCHAR,
-                    arrival ROW<delay INT, `time` BIGINT, uncertainty INT>,
-                    departure ROW<delay INT, `time` BIGINT, uncertainty INT>
-                >>,
-                `timestamp` BIGINT
-            >
-        ) WITH (
-            'connector' = 'kafka',
-            'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'updates-data',
-            'scan.startup.mode' = 'earliest-offset',
-            'properties.auto.offset.reset' = 'earliest',
-            'format' = 'protobuf',
-            'protobuf.message-class-name' = 'GtfsRealtime$FeedEntity',
-            'protobuf.read-default-values' = 'true'
-        );
-        """
-    t_env.execute_sql(source_ddl)
-    return table_name
+def parse_entity(iso_string):
+    from google.transit import gtfs_realtime_pb2
+    raw_bytes = iso_string.encode('latin-1')
+    entity = gtfs_realtime_pb2.FeedEntity()
+    entity.ParseFromString(raw_bytes)
+    if not entity.HasField('trip_update'):
+        return
+    tu = entity.trip_update
+    trip_id    = str(tu.trip.trip_id)    if tu.HasField('trip') else ''
+    route_id   = str(tu.trip.route_id)   if tu.HasField('trip') else ''
+    start_date = str(tu.trip.start_date) if tu.HasField('trip') else ''
+    for stu in tu.stop_time_update:
+        yield Row(
+            str(entity.id),
+            trip_id,
+            route_id,
+            start_date,
+            int(stu.stop_sequence),
+            str(stu.stop_id),
+            int(stu.arrival.delay   if stu.HasField('arrival')   else 0),
+            int(stu.arrival.time    if stu.HasField('arrival')   else 0),
+            int(stu.departure.delay if stu.HasField('departure') else 0),
+            int(stu.departure.time  if stu.HasField('departure') else 0),
+        )
 
 
 def log_processing():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10 * 1000)
 
-    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+    source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers('redpanda-1:29092')
+        .set_topics('updates-data')
+        .set_group_id('insert-job-update')
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema('ISO-8859-1'))
+        .build()
+    )
+
+    raw_stream = env.from_source(
+        source,
+        WatermarkStrategy.no_watermarks(),
+        'kafka-updates-source',
+        type_info=Types.STRING()
+    )
+
+    row_type = Types.ROW_NAMED(
+        ['feed_entity_id', 'trip_id', 'route_id', 'start_date',
+         'stop_sequence', 'stop_id',
+         'arrival_delay', 'arrival_time',
+         'departure_delay', 'departure_time'],
+        [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(),
+         Types.INT(), Types.STRING(),
+         Types.INT(), Types.INT(),
+         Types.INT(), Types.INT()]
+    )
+
+    flattened = raw_stream.flat_map(parse_entity, output_type=row_type)
+
+    jdbc_sink = JdbcSink.sink(
+        """INSERT INTO processed_stop_updates
+           (feed_entity_id, trip_id, route_id, start_date,
+            stop_sequence, stop_id,
+            arrival_delay, arrival_time,
+            departure_delay, departure_time)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        row_type,
+        JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
+        .with_url('jdbc:postgresql://postgres:5432/postgres')
+        .with_driver_name('org.postgresql.Driver')
+        .with_user_name('postgres')
+        .with_password('postgres')
+        .build(),
+        JdbcExecutionOptions.builder()
+        .with_batch_interval_ms(1000)
+        .with_batch_size(200)
+        .with_max_retries(3)
+        .build()
+    )
+
+    flattened.add_sink(jdbc_sink)
+
     try:
-        source_table = create_events_source_kafka(t_env)
-        postgres_sink = create_stop_updates_sink_postgres(t_env)
-
-        # UNNEST the repeated stop_time_update field so each stop becomes its own row
-        t_env.execute_sql(
-            f"""
-            INSERT INTO {postgres_sink}
-            SELECT
-                t.id AS feed_entity_id,
-                t.trip_update.trip.trip_id,
-                t.trip_update.trip.route_id,
-                t.trip_update.trip.start_date,
-                stu.stop_sequence,
-                stu.stop_id,
-                stu.arrival.delay AS arrival_delay,
-                stu.arrival.`time` AS arrival_time,
-                stu.departure.delay AS departure_delay,
-                stu.departure.`time` AS departure_time
-            FROM {source_table} AS t
-            CROSS JOIN UNNEST(t.trip_update.stop_time_update) AS stu(
-                stop_sequence, stop_id, arrival, departure
-            )
-            """
-        ).wait()
-
+        env.execute('insert-job-update')
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
 

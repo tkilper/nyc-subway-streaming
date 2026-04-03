@@ -1,0 +1,39 @@
+	at org.apache.flink.streaming.runtime.tasks.CopyingChainingOutput.pushToOperator(CopyingChainingOutput.java:75) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.runtime.tasks.CopyingChainingOutput.collect(CopyingChainingOutput.java:50) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.runtime.tasks.CopyingChainingOutput.collect(CopyingChainingOutput.java:29) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.table.runtime.operators.python.utils.StreamRecordRowDataWrappingCollector.collect(StreamRecordRowDataWrappingCollector.java:39) ~[?:?]
+
+	at org.apache.flink.table.runtime.operators.python.table.PythonTableFunctionOperator.emitResult(PythonTableFunctionOperator.java:203) ~[?:?]
+
+	at org.apache.flink.streaming.api.operators.python.process.AbstractExternalPythonFunctionOperator.emitResults(AbstractExternalPythonFunctionOperator.java:147) ~[?:?]
+
+	at org.apache.flink.streaming.api.operators.python.process.AbstractExternalPythonFunctionOperator.invokeFinishBundle(AbstractExternalPythonFunctionOperator.java:101) ~[?:?]
+
+	at org.apache.flink.streaming.api.operators.python.AbstractPythonFunctionOperator.checkInvokeFinishBundleByCount(AbstractPythonFunctionOperator.java:300) ~[?:?]
+
+	at org.apache.flink.table.runtime.operators.python.AbstractStatelessFunctionOperator.processElement(AbstractStatelessFunctionOperator.java:101) ~[?:?]
+
+	at org.apache.flink.streaming.runtime.tasks.CopyingChainingOutput.pushToOperator(CopyingChainingOutput.java:75) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.runtime.tasks.CopyingChainingOutput.collect(CopyingChainingOutput.java:50) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.runtime.tasks.CopyingChainingOutput.collect(CopyingChainingOutput.java:29) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.runtime.tasks.SourceOperatorStreamTask$AsyncDataOutputToOutput.emitRecord(SourceOperatorStreamTask.java:310) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.api.operators.source.SourceOutputWithWatermarks.collect(SourceOutputWithWatermarks.java:110) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.connector.kafka.source.reader.KafkaRecordEmitter$SourceOutputWrapper.collect(KafkaRecordEmitter.java:67) ~[flink-sql-connector-kafka-3.3.0-1.20.jar:3.3.0-1.20]
+
+	at org.apache.flink.api.common.serialization.DeserializationSchema.deserialize(DeserializationSchema.java:84) ~[flink-dist-1.20.2.jar:1.20.2]
+
+	at org.apache.flink.streaming.connectors.kafka.table.DynamicKafkaDeserializationSchema.deserialize(DynamicKafkaDeserializationSchema.java:115) ~[flink-sql-connector-kafka-3.3.0-1.20.jar:3.3.0-1.20]
+
+	at org.apache.flink.connector.kafka.source.reader.deserializer.KafkaDeserializationSchemaWrapper.deserialize(KafkaDeserializationSchemaWrapper.java:56) ~[flink-sql-connector-kafka-3.3.0-1.20.jar:3.3.0-1.20]
+
+	at org.apache.flink.connector.kafka.source.reader.KafkaRecordEmitter.emitRecord(KafkaRecordEmitter.java:53) ~[flink-sql-connector-kafka-3.3.0-1.20.jar:3.3.0-1.20]
+
+	... 14 more
