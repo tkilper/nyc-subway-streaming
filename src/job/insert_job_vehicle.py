@@ -1,5 +1,5 @@
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.table import EnvironmentSettings, DataTypes, TableEnvironment, StreamTableEnvironment
+from pyflink.table import EnvironmentSettings, StreamTableEnvironment
 
 
 def create_processed_events_sink_postgres(t_env):
@@ -8,12 +8,14 @@ def create_processed_events_sink_postgres(t_env):
         CREATE TABLE {table_name} (
             id VARCHAR,
             is_deleted BOOLEAN,
-            `vehicle.trip.trip_id` VARCHAR,
-            `vehicle.trip.route_id` VARCHAR,
-            `vehicle.trip.start_time` VARCHAR,
-            `vehicle.trip.start_date` VARCHAR,
-            `vehicle.stop_id` VARCHAR,
-            `vehicle.timestamp` BIGINT
+            trip_id VARCHAR,
+            route_id VARCHAR,
+            start_time VARCHAR,
+            start_date VARCHAR,
+            stop_id VARCHAR,
+            current_stop_sequence INT,
+            current_status INT,
+            event_timestamp BIGINT
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
@@ -29,12 +31,17 @@ def create_processed_events_sink_postgres(t_env):
 
 def create_events_source_kafka(t_env):
     table_name = "events_vehicle"
-    pattern = "yyyy-MM-dd HH:mm:ss.SSS"
     source_ddl = f"""
         CREATE TABLE {table_name} (
             id VARCHAR,
             is_deleted BOOLEAN,
-            vehicle ROW<trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>, stop_id VARCHAR, `timestamp` BIGINT>
+            vehicle ROW<
+                trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>,
+                stop_id VARCHAR,
+                current_stop_sequence INT,
+                current_status INT,
+                `timestamp` BIGINT
+            >
         ) WITH (
             'connector' = 'kafka',
             'properties.bootstrap.servers' = 'redpanda-1:29092',
@@ -49,38 +56,38 @@ def create_events_source_kafka(t_env):
     t_env.execute_sql(source_ddl)
     return table_name
 
+
 def log_processing():
-    # Set up the execution environment
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10 * 1000)
-    # env.set_parallelism(1)
 
-    # Set up the table environment
     settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = StreamTableEnvironment.create(env, environment_settings=settings)
     try:
-        # Create Kafka table
         source_table = create_events_source_kafka(t_env)
         postgres_sink = create_processed_events_sink_postgres(t_env)
-        # write records to postgres too!
+
         t_env.execute_sql(
             f"""
-                    INSERT INTO {postgres_sink}
-                    SELECT
-                        id,
-                        is_deleted,
-                        vehicle.trip.trip_id as trip_id,
-                        vehicle.trip.route_id as route_id,
-                        vehicle.trip.start_time as start_time,
-                        vehicle.trip.start_date as start_date,
-                        vehicle.stop_id as stop_id,
-                        vehicle.`timestamp` as event_timestamp
-                    FROM {source_table}
-                    """
+            INSERT INTO {postgres_sink}
+            SELECT
+                id,
+                is_deleted,
+                vehicle.trip.trip_id,
+                vehicle.trip.route_id,
+                vehicle.trip.start_time,
+                vehicle.trip.start_date,
+                vehicle.stop_id,
+                vehicle.current_stop_sequence,
+                vehicle.current_status,
+                vehicle.`timestamp` AS event_timestamp
+            FROM {source_table}
+            """
         ).wait()
 
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
+
 
 if __name__ == '__main__':
     log_processing()
