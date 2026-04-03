@@ -75,18 +75,18 @@ def log_processing():
             f"""
             INSERT INTO {postgres_sink}
             SELECT
-                id AS feed_entity_id,
-                trip_update.trip.trip_id,
-                trip_update.trip.route_id,
-                trip_update.trip.start_date,
+                t.id AS feed_entity_id,
+                t.trip_update.trip.trip_id,
+                t.trip_update.trip.route_id,
+                t.trip_update.trip.start_date,
                 stu.stop_sequence,
                 stu.stop_id,
                 stu.arrival.delay AS arrival_delay,
                 stu.arrival.`time` AS arrival_time,
                 stu.departure.delay AS departure_delay,
                 stu.departure.`time` AS departure_time
-            FROM {source_table}
-            CROSS JOIN UNNEST(trip_update.stop_time_update) AS stu(
+            FROM {source_table} AS t
+            CROSS JOIN UNNEST(t.trip_update.stop_time_update) AS stu(
                 stop_sequence, stop_id, arrival, departure
             )
             """

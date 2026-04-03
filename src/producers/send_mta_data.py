@@ -39,6 +39,7 @@ def poll(producer):
 
 
 def main():
+    print("Creating Kafka producer...")
     producer = KafkaProducer(
         bootstrap_servers='localhost:9092',
         value_serializer=lambda v: v.SerializeToString()

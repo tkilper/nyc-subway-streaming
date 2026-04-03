@@ -15,16 +15,30 @@ RUN python -m pip install --upgrade pip; \
     pip3 install -r requirements.txt  --no-cache-dir;
 
 # Download connector libraries
-RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/2.1.0/flink-json-2.1.0.jar; \
-    #wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-protobuf/2.1.0/flink-protobuf-2.1.0.jar; \
-    wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/4.0.1-2.0/flink-sql-connector-kafka-4.0.1-2.0.jar; \
+RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/1.20.2/flink-json-1.20.2.jar; \
+    wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-protobuf/1.20.2/flink-protobuf-1.20.2.jar; \
+    wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.3.0-1.20/flink-sql-connector-kafka-3.3.0-1.20.jar; \
     wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/3.3.0-1.20/flink-connector-jdbc-3.3.0-1.20.jar; \
     wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.8/postgresql-42.7.8.jar;
 
-COPY /gtfs-protobuf/GtfsRealtime.jar /opt/flink/lib/
-#COPY /protobuf/protobuf-java-4.33.0.jar /opt/flink/lib/
-#COPY /protobuf/protobuf.jar /opt/flink/lib/
-COPY /protobuf/flink-protobuf.jar /opt/flink/lib/
+# Download protobuf-java 3.25.3 (required by flink-protobuf-1.20.2)
+RUN wget -P /opt/flink/lib/ https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.25.3/protobuf-java-3.25.3.jar
+
+# Regenerate GtfsRealtime.java from the .proto using apt protoc (3.x), then compile against
+# protobuf-java 3.25.3 so the JAR is free of 4.x RuntimeVersion references.
+COPY /gtfs-protobuf/gtfs-realtime.proto /tmp/gtfs-proto/gtfs-realtime.proto
+RUN apt-get update -y && \
+    apt-get install -y protobuf-compiler && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /tmp/gtfs/src /tmp/gtfs/classes && \
+    protoc \
+      --java_out=/tmp/gtfs/src \
+      --proto_path=/tmp/gtfs-proto \
+      /tmp/gtfs-proto/gtfs-realtime.proto && \
+    find /tmp/gtfs/src -name "*.java" \
+      | xargs javac -cp /opt/flink/lib/protobuf-java-3.25.3.jar -d /tmp/gtfs/classes && \
+    jar cf /opt/flink/lib/GtfsRealtime.jar -C /tmp/gtfs/classes . && \
+    rm -rf /tmp/gtfs /tmp/gtfs-proto
 
 RUN echo "jobmanager.memory.heap.size: 512m" >> /opt/flink/conf/flink-conf.yaml;
 RUN echo "taskmanager.memory.flink.size: 1024m" >> /opt/flink/conf/flink-conf.yaml;
