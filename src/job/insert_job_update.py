@@ -1,11 +1,9 @@
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
-from pyflink.datastream.connectors.jdbc import (
-    JdbcSink, JdbcConnectionOptions, JdbcExecutionOptions
-)
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.typeinfo import Types
 from pyflink.common.watermark_strategy import WatermarkStrategy
+from pyflink.table import EnvironmentSettings, StreamTableEnvironment, Schema
 from pyflink.common import Row
 
 
@@ -39,6 +37,9 @@ def log_processing():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(10 * 1000)
 
+    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+
     source = (
         KafkaSource.builder()
         .set_bootstrap_servers('redpanda-1:29092')
@@ -63,37 +64,61 @@ def log_processing():
          'departure_delay', 'departure_time'],
         [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(),
          Types.INT(), Types.STRING(),
-         Types.INT(), Types.INT(),
-         Types.INT(), Types.INT()]
+         Types.INT(), Types.LONG(),
+         Types.INT(), Types.LONG()]
     )
 
-    flattened = raw_stream.flat_map(parse_entity, output_type=row_type)
+    flat_stream = raw_stream.flat_map(parse_entity, output_type=row_type)
 
-    jdbc_sink = JdbcSink.sink(
-        """INSERT INTO processed_stop_updates
-           (feed_entity_id, trip_id, route_id, start_date,
-            stop_sequence, stop_id,
-            arrival_delay, arrival_time,
-            departure_delay, departure_time)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        row_type,
-        JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
-        .with_url('jdbc:postgresql://postgres:5432/postgres')
-        .with_driver_name('org.postgresql.Driver')
-        .with_user_name('postgres')
-        .with_password('postgres')
-        .build(),
-        JdbcExecutionOptions.builder()
-        .with_batch_interval_ms(1000)
-        .with_batch_size(200)
-        .with_max_retries(3)
-        .build()
+    flat_table = t_env.from_data_stream(
+        flat_stream,
+        Schema.new_builder()
+            .column('feed_entity_id', 'STRING')
+            .column('trip_id', 'STRING')
+            .column('route_id', 'STRING')
+            .column('start_date', 'STRING')
+            .column('stop_sequence', 'INT')
+            .column('stop_id', 'STRING')
+            .column('arrival_delay', 'INT')
+            .column('arrival_time', 'BIGINT')
+            .column('departure_delay', 'INT')
+            .column('departure_time', 'BIGINT')
+            .build()
     )
+    t_env.create_temporary_view('flat_updates', flat_table)
 
-    flattened.add_sink(jdbc_sink)
+    t_env.execute_sql("""
+        CREATE TABLE processed_stop_updates (
+            feed_entity_id VARCHAR,
+            trip_id VARCHAR,
+            route_id VARCHAR,
+            start_date VARCHAR,
+            stop_sequence INT,
+            stop_id VARCHAR,
+            arrival_delay INT,
+            arrival_time BIGINT,
+            departure_delay INT,
+            departure_time BIGINT
+        ) WITH (
+            'connector' = 'jdbc',
+            'url' = 'jdbc:postgresql://postgres:5432/postgres',
+            'table-name' = 'processed_stop_updates',
+            'username' = 'postgres',
+            'password' = 'postgres',
+            'driver' = 'org.postgresql.Driver'
+        )
+    """)
 
     try:
-        env.execute('insert-job-update')
+        t_env.execute_sql("""
+            INSERT INTO processed_stop_updates
+            SELECT
+                feed_entity_id, trip_id, route_id, start_date,
+                stop_sequence, stop_id,
+                arrival_delay, arrival_time,
+                departure_delay, departure_time
+            FROM flat_updates
+        """).wait()
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
 

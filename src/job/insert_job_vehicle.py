@@ -1,11 +1,87 @@
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.table import EnvironmentSettings, StreamTableEnvironment
+from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
+from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.typeinfo import Types
+from pyflink.common.watermark_strategy import WatermarkStrategy
+from pyflink.table import EnvironmentSettings, StreamTableEnvironment, Schema
+from pyflink.common import Row
 
 
-def create_processed_events_sink_postgres(t_env):
-    table_name = 'processed_vehicle'
-    sink_ddl = f"""
-        CREATE TABLE {table_name} (
+def parse_vehicle(iso_string):
+    from google.transit import gtfs_realtime_pb2
+    raw_bytes = iso_string.encode('latin-1')
+    entity = gtfs_realtime_pb2.FeedEntity()
+    entity.ParseFromString(raw_bytes)
+    if not entity.HasField('vehicle'):
+        return
+    v = entity.vehicle
+    yield Row(
+        str(entity.id),
+        bool(entity.is_deleted),
+        str(v.trip.trip_id)    if v.HasField('trip') else '',
+        str(v.trip.route_id)   if v.HasField('trip') else '',
+        str(v.trip.start_time) if v.HasField('trip') else '',
+        str(v.trip.start_date) if v.HasField('trip') else '',
+        str(v.stop_id),
+        int(v.current_stop_sequence),
+        int(v.current_status),
+        int(v.timestamp),
+    )
+
+
+def log_processing():
+    env = StreamExecutionEnvironment.get_execution_environment()
+    env.enable_checkpointing(10 * 1000)
+
+    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+
+    source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers('redpanda-1:29092')
+        .set_topics('vehicle-data')
+        .set_group_id('insert-job-vehicle')
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema('ISO-8859-1'))
+        .build()
+    )
+
+    raw_stream = env.from_source(
+        source,
+        WatermarkStrategy.no_watermarks(),
+        'kafka-vehicle-source',
+        type_info=Types.STRING()
+    )
+
+    row_type = Types.ROW_NAMED(
+        ['id', 'is_deleted', 'trip_id', 'route_id', 'start_time', 'start_date',
+         'stop_id', 'current_stop_sequence', 'current_status', 'event_timestamp'],
+        [Types.STRING(), Types.BOOLEAN(), Types.STRING(), Types.STRING(),
+         Types.STRING(), Types.STRING(),
+         Types.STRING(), Types.INT(), Types.INT(), Types.LONG()]
+    )
+
+    parsed = raw_stream.flat_map(parse_vehicle, output_type=row_type)
+
+    parsed_table = t_env.from_data_stream(
+        parsed,
+        Schema.new_builder()
+            .column('id', 'STRING')
+            .column('is_deleted', 'BOOLEAN')
+            .column('trip_id', 'STRING')
+            .column('route_id', 'STRING')
+            .column('start_time', 'STRING')
+            .column('start_date', 'STRING')
+            .column('stop_id', 'STRING')
+            .column('current_stop_sequence', 'INT')
+            .column('current_status', 'INT')
+            .column('event_timestamp', 'BIGINT')
+            .build()
+    )
+    t_env.create_temporary_view('parsed_vehicle', parsed_table)
+
+    t_env.execute_sql("""
+        CREATE TABLE processed_vehicle (
             id VARCHAR,
             is_deleted BOOLEAN,
             trip_id VARCHAR,
@@ -19,72 +95,21 @@ def create_processed_events_sink_postgres(t_env):
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
-            'table-name' = '{table_name}',
+            'table-name' = 'processed_vehicle',
             'username' = 'postgres',
             'password' = 'postgres',
             'driver' = 'org.postgresql.Driver'
-        );
-        """
-    t_env.execute_sql(sink_ddl)
-    return table_name
+        )
+    """)
 
-
-def create_events_source_kafka(t_env):
-    table_name = "events_vehicle"
-    source_ddl = f"""
-        CREATE TABLE {table_name} (
-            id VARCHAR,
-            is_deleted BOOLEAN,
-            vehicle ROW<
-                trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>,
-                stop_id VARCHAR,
-                current_stop_sequence INT,
-                current_status INT,
-                `timestamp` BIGINT
-            >
-        ) WITH (
-            'connector' = 'kafka',
-            'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'vehicle-data',
-            'scan.startup.mode' = 'earliest-offset',
-            'properties.auto.offset.reset' = 'earliest',
-            'format' = 'protobuf',
-            'protobuf.message-class-name' = 'com.google.transit.realtime.GtfsRealtime$FeedEntity',
-            'protobuf.read-default-values' = 'true'
-        );
-        """
-    t_env.execute_sql(source_ddl)
-    return table_name
-
-
-def log_processing():
-    env = StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(10 * 1000)
-
-    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
     try:
-        source_table = create_events_source_kafka(t_env)
-        postgres_sink = create_processed_events_sink_postgres(t_env)
-
-        t_env.execute_sql(
-            f"""
-            INSERT INTO {postgres_sink}
+        t_env.execute_sql("""
+            INSERT INTO processed_vehicle
             SELECT
-                id,
-                is_deleted,
-                vehicle.trip.trip_id,
-                vehicle.trip.route_id,
-                vehicle.trip.start_time,
-                vehicle.trip.start_date,
-                vehicle.stop_id,
-                vehicle.current_stop_sequence,
-                vehicle.current_status,
-                vehicle.`timestamp` AS event_timestamp
-            FROM {source_table}
-            """
-        ).wait()
-
+                id, is_deleted, trip_id, route_id, start_time, start_date,
+                stop_id, current_stop_sequence, current_status, event_timestamp
+            FROM parsed_vehicle
+        """).wait()
     except Exception as e:
         print("Writing records from Kafka to JDBC failed:", str(e))
 

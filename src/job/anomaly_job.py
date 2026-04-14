@@ -1,13 +1,78 @@
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.table import EnvironmentSettings, StreamTableEnvironment
+from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
+from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.typeinfo import Types
+from pyflink.common.watermark_strategy import WatermarkStrategy
+from pyflink.table import EnvironmentSettings, StreamTableEnvironment, Schema
+from pyflink.common import Row
 
-DELAY_THRESHOLD_SECONDS = 300  # 5 minutes — trips with max arrival delay above this are flagged
+DELAY_THRESHOLD_SECONDS = 300  # 5 minutes
 
 
-def create_anomaly_sink_postgres(t_env):
-    table_name = 'trip_delay_anomalies'
-    sink_ddl = f"""
-        CREATE TABLE {table_name} (
+def parse_stop_updates(iso_string):
+    from google.transit import gtfs_realtime_pb2
+    raw_bytes = iso_string.encode('latin-1')
+    entity = gtfs_realtime_pb2.FeedEntity()
+    entity.ParseFromString(raw_bytes)
+    if not entity.HasField('trip_update'):
+        return
+    tu = entity.trip_update
+    trip_id    = str(tu.trip.trip_id)    if tu.HasField('trip') else ''
+    route_id   = str(tu.trip.route_id)   if tu.HasField('trip') else ''
+    start_date = str(tu.trip.start_date) if tu.HasField('trip') else ''
+    for stu in tu.stop_time_update:
+        arrival_delay = int(stu.arrival.delay if stu.HasField('arrival') else 0)
+        yield Row(trip_id, route_id, start_date, int(stu.stop_sequence), str(stu.stop_id), arrival_delay)
+
+
+def run():
+    env = StreamExecutionEnvironment.get_execution_environment()
+    env.enable_checkpointing(10 * 1000)
+
+    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+
+    source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers('redpanda-1:29092')
+        .set_topics('updates-data')
+        .set_group_id('anomaly-job')
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema('ISO-8859-1'))
+        .build()
+    )
+
+    raw_stream = env.from_source(
+        source,
+        WatermarkStrategy.no_watermarks(),
+        'kafka-updates-source',
+        type_info=Types.STRING()
+    )
+
+    row_type = Types.ROW_NAMED(
+        ['trip_id', 'route_id', 'start_date', 'stop_sequence', 'stop_id', 'arrival_delay'],
+        [Types.STRING(), Types.STRING(), Types.STRING(), Types.INT(), Types.STRING(), Types.INT()]
+    )
+
+    flat_stream = raw_stream.flat_map(parse_stop_updates, output_type=row_type)
+
+    # Convert DataStream to Table, adding proc_time as a time attribute for windowing
+    flat_table = t_env.from_data_stream(
+        flat_stream,
+        Schema.new_builder()
+            .column('trip_id', 'STRING')
+            .column('route_id', 'STRING')
+            .column('start_date', 'STRING')
+            .column('stop_sequence', 'INT')
+            .column('stop_id', 'STRING')
+            .column('arrival_delay', 'INT')
+            .column_by_expression('proc_time', 'PROCTIME()')
+            .build()
+    )
+    t_env.create_temporary_view('flat_updates', flat_table)
+
+    t_env.execute_sql("""
+        CREATE TABLE trip_delay_anomalies (
             trip_id VARCHAR,
             route_id VARCHAR,
             start_date VARCHAR,
@@ -20,86 +85,16 @@ def create_anomaly_sink_postgres(t_env):
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
-            'table-name' = '{table_name}',
+            'table-name' = 'trip_delay_anomalies',
             'username' = 'postgres',
             'password' = 'postgres',
             'driver' = 'org.postgresql.Driver'
-        );
-        """
-    t_env.execute_sql(sink_ddl)
-    return table_name
-
-
-def create_updates_source_kafka(t_env):
-    table_name = "anomaly_source"
-    source_ddl = f"""
-        CREATE TABLE {table_name} (
-            id VARCHAR,
-            is_deleted BOOLEAN,
-            trip_update ROW<
-                trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>,
-                stop_time_update ARRAY<ROW<
-                    stop_sequence INT,
-                    stop_id VARCHAR,
-                    arrival ROW<delay INT, `time` BIGINT, uncertainty INT>,
-                    departure ROW<delay INT, `time` BIGINT, uncertainty INT>
-                >>,
-                `timestamp` BIGINT
-            >,
-            proc_time AS PROCTIME()
-        ) WITH (
-            'connector' = 'kafka',
-            'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'updates-data',
-            'scan.startup.mode' = 'earliest-offset',
-            'properties.auto.offset.reset' = 'earliest',
-            'format' = 'protobuf',
-            'protobuf.message-class-name' = 'com.google.transit.realtime.GtfsRealtime$FeedEntity',
-            'protobuf.read-default-values' = 'true'
-        );
-        """
-    t_env.execute_sql(source_ddl)
-    return table_name
-
-
-def create_flattened_view(t_env, source_table):
-    """Unnest stop_time_update array into individual rows with proc_time carried through."""
-    view_name = "flattened_stop_updates"
-    t_env.execute_sql(
-        f"""
-        CREATE TEMPORARY VIEW {view_name} AS
-        SELECT
-            t.trip_update.trip.trip_id,
-            t.trip_update.trip.route_id,
-            t.trip_update.trip.start_date,
-            stu.stop_sequence,
-            stu.stop_id,
-            CASE WHEN stu.arrival IS NOT NULL THEN stu.arrival.delay ELSE 0 END AS arrival_delay,
-            t.proc_time
-        FROM {source_table} AS t
-        CROSS JOIN UNNEST(t.trip_update.stop_time_update) AS stu(
-            stop_sequence, stop_id, arrival, departure
         )
-        """
-    )
-    return view_name
-
-
-def run():
-    env = StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(10 * 1000)
-
-    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+    """)
 
     try:
-        source_table = create_updates_source_kafka(t_env)
-        flattened = create_flattened_view(t_env, source_table)
-        sink = create_anomaly_sink_postgres(t_env)
-
-        t_env.execute_sql(
-            f"""
-            INSERT INTO {sink}
+        t_env.execute_sql(f"""
+            INSERT INTO trip_delay_anomalies
             SELECT
                 trip_id,
                 route_id,
@@ -110,15 +105,13 @@ def run():
                 MAX(arrival_delay)                            AS max_arrival_delay,
                 COUNT(stop_sequence)                          AS stop_count,
                 MAX(arrival_delay) > {DELAY_THRESHOLD_SECONDS} AS is_anomaly
-            FROM {flattened}
+            FROM flat_updates
             GROUP BY
                 TUMBLE(proc_time, INTERVAL '5' MINUTE),
                 trip_id,
                 route_id,
                 start_date
-            """
-        ).wait()
-
+        """).wait()
     except Exception as e:
         print("Anomaly detection job failed:", str(e))
         raise

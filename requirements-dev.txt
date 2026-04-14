@@ -1,0 +1,5 @@
+pytest>=7.0
+flake8>=7.0
+gtfs-realtime-bindings>=1.0
+kafka-python>=2.0
+requests>=2.28

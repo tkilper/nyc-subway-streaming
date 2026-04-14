@@ -1,11 +1,132 @@
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.table import EnvironmentSettings, StreamTableEnvironment
+from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
+from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common.typeinfo import Types
+from pyflink.common.watermark_strategy import WatermarkStrategy
+from pyflink.table import EnvironmentSettings, StreamTableEnvironment, Schema
+from pyflink.common import Row
 
 
-def create_trip_tracking_sink_postgres(t_env):
-    table_name = 'trip_tracking'
-    sink_ddl = f"""
-        CREATE TABLE {table_name} (
+def parse_vehicle(iso_string):
+    from google.transit import gtfs_realtime_pb2
+    raw_bytes = iso_string.encode('latin-1')
+    entity = gtfs_realtime_pb2.FeedEntity()
+    entity.ParseFromString(raw_bytes)
+    if not entity.HasField('vehicle'):
+        return
+    v = entity.vehicle
+    yield Row(
+        str(v.trip.trip_id)    if v.HasField('trip') else '',
+        str(v.trip.route_id)   if v.HasField('trip') else '',
+        str(v.trip.start_date) if v.HasField('trip') else '',
+        str(v.stop_id),
+        int(v.current_stop_sequence),
+        int(v.current_status),
+        int(v.timestamp),
+    )
+
+
+def parse_stop_updates(iso_string):
+    from google.transit import gtfs_realtime_pb2
+    raw_bytes = iso_string.encode('latin-1')
+    entity = gtfs_realtime_pb2.FeedEntity()
+    entity.ParseFromString(raw_bytes)
+    if not entity.HasField('trip_update'):
+        return
+    tu = entity.trip_update
+    trip_id    = str(tu.trip.trip_id)    if tu.HasField('trip') else ''
+    start_date = str(tu.trip.start_date) if tu.HasField('trip') else ''
+    for stu in tu.stop_time_update:
+        arrival_delay   = int(stu.arrival.delay   if stu.HasField('arrival')   else 0)
+        departure_delay = int(stu.departure.delay if stu.HasField('departure') else 0)
+        yield Row(trip_id, start_date, str(stu.stop_id), int(stu.stop_sequence), arrival_delay, departure_delay)
+
+
+def run():
+    env = StreamExecutionEnvironment.get_execution_environment()
+    env.enable_checkpointing(10 * 1000)
+
+    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+
+    # --- Vehicle source ---
+    vehicle_source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers('redpanda-1:29092')
+        .set_topics('vehicle-data')
+        .set_group_id('trip-tracking-vehicle')
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema('ISO-8859-1'))
+        .build()
+    )
+    raw_vehicle = env.from_source(
+        vehicle_source,
+        WatermarkStrategy.no_watermarks(),
+        'kafka-vehicle-source',
+        type_info=Types.STRING()
+    )
+    vehicle_row_type = Types.ROW_NAMED(
+        ['trip_id', 'route_id', 'start_date', 'stop_id',
+         'current_stop_sequence', 'current_status', 'event_timestamp'],
+        [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(),
+         Types.INT(), Types.INT(), Types.LONG()]
+    )
+    vehicle_stream = raw_vehicle.flat_map(parse_vehicle, output_type=vehicle_row_type)
+
+    # --- Updates source ---
+    updates_source = (
+        KafkaSource.builder()
+        .set_bootstrap_servers('redpanda-1:29092')
+        .set_topics('updates-data')
+        .set_group_id('trip-tracking-updates')
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest())
+        .set_value_only_deserializer(SimpleStringSchema('ISO-8859-1'))
+        .build()
+    )
+    raw_updates = env.from_source(
+        updates_source,
+        WatermarkStrategy.no_watermarks(),
+        'kafka-updates-source',
+        type_info=Types.STRING()
+    )
+    update_row_type = Types.ROW_NAMED(
+        ['trip_id', 'start_date', 'stop_id', 'stop_sequence', 'arrival_delay', 'departure_delay'],
+        [Types.STRING(), Types.STRING(), Types.STRING(), Types.INT(), Types.INT(), Types.INT()]
+    )
+    updates_stream = raw_updates.flat_map(parse_stop_updates, output_type=update_row_type)
+
+    # Convert both DataStreams to Tables, adding proc_time for the interval join
+    vehicle_table = t_env.from_data_stream(
+        vehicle_stream,
+        Schema.new_builder()
+            .column('trip_id', 'STRING')
+            .column('route_id', 'STRING')
+            .column('start_date', 'STRING')
+            .column('stop_id', 'STRING')
+            .column('current_stop_sequence', 'INT')
+            .column('current_status', 'INT')
+            .column('event_timestamp', 'BIGINT')
+            .column_by_expression('proc_time', 'PROCTIME()')
+            .build()
+    )
+    t_env.create_temporary_view('vehicle_tbl', vehicle_table)
+
+    updates_table = t_env.from_data_stream(
+        updates_stream,
+        Schema.new_builder()
+            .column('trip_id', 'STRING')
+            .column('start_date', 'STRING')
+            .column('stop_id', 'STRING')
+            .column('stop_sequence', 'INT')
+            .column('arrival_delay', 'INT')
+            .column('departure_delay', 'INT')
+            .column_by_expression('proc_time', 'PROCTIME()')
+            .build()
+    )
+    t_env.create_temporary_view('updates_tbl', updates_table)
+
+    t_env.execute_sql("""
+        CREATE TABLE trip_tracking (
             trip_id VARCHAR,
             route_id VARCHAR,
             start_date VARCHAR,
@@ -18,138 +139,33 @@ def create_trip_tracking_sink_postgres(t_env):
         ) WITH (
             'connector' = 'jdbc',
             'url' = 'jdbc:postgresql://postgres:5432/postgres',
-            'table-name' = '{table_name}',
+            'table-name' = 'trip_tracking',
             'username' = 'postgres',
             'password' = 'postgres',
             'driver' = 'org.postgresql.Driver'
-        );
-        """
-    t_env.execute_sql(sink_ddl)
-    return table_name
-
-
-def create_vehicle_source_kafka(t_env):
-    table_name = "tracking_vehicle"
-    source_ddl = f"""
-        CREATE TABLE {table_name} (
-            id VARCHAR,
-            is_deleted BOOLEAN,
-            vehicle ROW<
-                trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>,
-                stop_id VARCHAR,
-                current_stop_sequence INT,
-                current_status INT,
-                `timestamp` BIGINT
-            >,
-            proc_time AS PROCTIME()
-        ) WITH (
-            'connector' = 'kafka',
-            'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'vehicle-data',
-            'scan.startup.mode' = 'earliest-offset',
-            'properties.auto.offset.reset' = 'earliest',
-            'format' = 'protobuf',
-            'protobuf.message-class-name' = 'com.google.transit.realtime.GtfsRealtime$FeedEntity',
-            'protobuf.read-default-values' = 'true'
-        );
-        """
-    t_env.execute_sql(source_ddl)
-    return table_name
-
-
-def create_updates_source_kafka(t_env):
-    table_name = "tracking_updates"
-    source_ddl = f"""
-        CREATE TABLE {table_name} (
-            id VARCHAR,
-            is_deleted BOOLEAN,
-            trip_update ROW<
-                trip ROW<trip_id VARCHAR, route_id VARCHAR, start_time VARCHAR, start_date VARCHAR>,
-                stop_time_update ARRAY<ROW<
-                    stop_sequence INT,
-                    stop_id VARCHAR,
-                    arrival ROW<delay INT, `time` BIGINT, uncertainty INT>,
-                    departure ROW<delay INT, `time` BIGINT, uncertainty INT>
-                >>,
-                `timestamp` BIGINT
-            >,
-            proc_time AS PROCTIME()
-        ) WITH (
-            'connector' = 'kafka',
-            'properties.bootstrap.servers' = 'redpanda-1:29092',
-            'topic' = 'updates-data',
-            'scan.startup.mode' = 'earliest-offset',
-            'properties.auto.offset.reset' = 'earliest',
-            'format' = 'protobuf',
-            'protobuf.message-class-name' = 'com.google.transit.realtime.GtfsRealtime$FeedEntity',
-            'protobuf.read-default-values' = 'true'
-        );
-        """
-    t_env.execute_sql(source_ddl)
-    return table_name
-
-
-def create_flat_updates_view(t_env, updates_table):
-    """Unnest stop_time_update so each stop is a row, keeping proc_time for interval join."""
-    view_name = "flat_updates_for_tracking"
-    t_env.execute_sql(
-        f"""
-        CREATE TEMPORARY VIEW {view_name} AS
-        SELECT
-            t.trip_update.trip.trip_id       AS trip_id,
-            t.trip_update.trip.start_date    AS start_date,
-            stu.stop_id                      AS stop_id,
-            stu.stop_sequence                AS stop_sequence,
-            stu.arrival.delay                AS arrival_delay,
-            stu.departure.delay              AS departure_delay,
-            t.proc_time
-        FROM {updates_table} AS t
-        CROSS JOIN UNNEST(t.trip_update.stop_time_update) AS stu(
-            stop_sequence, stop_id, arrival, departure
         )
-        """
-    )
-    return view_name
-
-
-def run():
-    env = StreamExecutionEnvironment.get_execution_environment()
-    env.enable_checkpointing(10 * 1000)
-
-    settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-    t_env = StreamTableEnvironment.create(env, environment_settings=settings)
+    """)
 
     try:
-        vehicle_table = create_vehicle_source_kafka(t_env)
-        updates_table = create_updates_source_kafka(t_env)
-        flat_updates = create_flat_updates_view(t_env, updates_table)
-        sink = create_trip_tracking_sink_postgres(t_env)
-
-        # Interval join: match a vehicle event to the most recent stop update for the same
-        # trip + stop within a ±10-minute processing-time window.
-        # This tolerates feed skew between the two topics.
-        t_env.execute_sql(
-            f"""
-            INSERT INTO {sink}
+        t_env.execute_sql("""
+            INSERT INTO trip_tracking
             SELECT
-                v.vehicle.trip.trip_id                AS trip_id,
-                v.vehicle.trip.route_id               AS route_id,
-                v.vehicle.trip.start_date             AS start_date,
-                v.vehicle.stop_id                     AS current_stop_id,
-                v.vehicle.current_stop_sequence       AS current_stop_sequence,
-                v.vehicle.current_status              AS current_status,
-                u.arrival_delay                       AS arrival_delay,
-                u.departure_delay                     AS departure_delay,
-                v.vehicle.`timestamp`                 AS event_timestamp
-            FROM {vehicle_table} v
-            JOIN {flat_updates} u
-              ON  v.vehicle.trip.trip_id = u.trip_id
-              AND v.vehicle.stop_id      = u.stop_id
+                v.trip_id,
+                v.route_id,
+                v.start_date,
+                v.stop_id          AS current_stop_id,
+                v.current_stop_sequence,
+                v.current_status,
+                u.arrival_delay,
+                u.departure_delay,
+                v.event_timestamp
+            FROM vehicle_tbl v
+            JOIN updates_tbl u
+              ON  v.trip_id = u.trip_id
+              AND v.stop_id = u.stop_id
               AND v.proc_time BETWEEN u.proc_time - INTERVAL '10' MINUTE
                                   AND u.proc_time + INTERVAL '10' MINUTE
-            """
-        ).wait()
-
+        """).wait()
     except Exception as e:
         print("Trip tracking job failed:", str(e))
         raise

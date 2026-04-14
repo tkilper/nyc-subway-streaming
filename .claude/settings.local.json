@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\OneDrive\\\\Desktop\\\\Data_Eng_Portfolio_Projects\\\\nyc-subway-streaming\\\\.github\\\\workflows\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Tristan\\\\OneDrive\\\\Desktop\\\\Data_Eng_Portfolio_Projects\\\\nyc-subway-streaming\\\\tests\")",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m flake8 src/ tests/ --max-line-length=120)",
+      "Bash(python -m flake8 src/ tests/)"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+[flake8]
+max-line-length = 120
+extend-ignore =
+    # Alignment spacing used throughout the codebase (e.g. aligning = in multi-line assignments)
+    E221,
+    E272,
+    # Continuation line indentation style
+    E131,
+    # Blank line count around top-level definitions
+    E302,
+    E305,
+    # Trailing whitespace / missing newline at EOF
+    W292,
+    W293
+per-file-ignores =
+    # aggregation_job.py is a demo job with unused imports
+    src/job/aggregation_job.py:F401,F841
