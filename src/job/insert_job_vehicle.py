@@ -9,19 +9,20 @@ from pyflink.common import Row
 
 def parse_vehicle(iso_string):
     from google.transit import gtfs_realtime_pb2
-    raw_bytes = iso_string.encode('latin-1')
+
+    raw_bytes = iso_string.encode("latin-1")
     entity = gtfs_realtime_pb2.FeedEntity()
     entity.ParseFromString(raw_bytes)
-    if not entity.HasField('vehicle'):
+    if not entity.HasField("vehicle"):
         return
     v = entity.vehicle
     yield Row(
         str(entity.id),
         bool(entity.is_deleted),
-        str(v.trip.trip_id)    if v.HasField('trip') else '',
-        str(v.trip.route_id)   if v.HasField('trip') else '',
-        str(v.trip.start_time) if v.HasField('trip') else '',
-        str(v.trip.start_date) if v.HasField('trip') else '',
+        str(v.trip.trip_id) if v.HasField("trip") else "",
+        str(v.trip.route_id) if v.HasField("trip") else "",
+        str(v.trip.start_time) if v.HasField("trip") else "",
+        str(v.trip.start_date) if v.HasField("trip") else "",
         str(v.stop_id),
         int(v.current_stop_sequence),
         int(v.current_status),
@@ -38,27 +39,46 @@ def log_processing():
 
     source = (
         KafkaSource.builder()
-        .set_bootstrap_servers('redpanda-1:29092')
-        .set_topics('vehicle-data')
-        .set_group_id('insert-job-vehicle')
+        .set_bootstrap_servers("redpanda-1:29092")
+        .set_topics("vehicle-data")
+        .set_group_id("insert-job-vehicle")
         .set_starting_offsets(KafkaOffsetsInitializer.earliest())
-        .set_value_only_deserializer(SimpleStringSchema('ISO-8859-1'))
+        .set_value_only_deserializer(SimpleStringSchema("ISO-8859-1"))
         .build()
     )
 
     raw_stream = env.from_source(
         source,
         WatermarkStrategy.no_watermarks(),
-        'kafka-vehicle-source',
-        type_info=Types.STRING()
+        "kafka-vehicle-source",
+        type_info=Types.STRING(),
     )
 
     row_type = Types.ROW_NAMED(
-        ['id', 'is_deleted', 'trip_id', 'route_id', 'start_time', 'start_date',
-         'stop_id', 'current_stop_sequence', 'current_status', 'event_timestamp'],
-        [Types.STRING(), Types.BOOLEAN(), Types.STRING(), Types.STRING(),
-         Types.STRING(), Types.STRING(),
-         Types.STRING(), Types.INT(), Types.INT(), Types.LONG()]
+        [
+            "id",
+            "is_deleted",
+            "trip_id",
+            "route_id",
+            "start_time",
+            "start_date",
+            "stop_id",
+            "current_stop_sequence",
+            "current_status",
+            "event_timestamp",
+        ],
+        [
+            Types.STRING(),
+            Types.BOOLEAN(),
+            Types.STRING(),
+            Types.STRING(),
+            Types.STRING(),
+            Types.STRING(),
+            Types.STRING(),
+            Types.INT(),
+            Types.INT(),
+            Types.LONG(),
+        ],
     )
 
     parsed = raw_stream.flat_map(parse_vehicle, output_type=row_type)
@@ -66,19 +86,19 @@ def log_processing():
     parsed_table = t_env.from_data_stream(
         parsed,
         Schema.new_builder()
-            .column('id', 'STRING')
-            .column('is_deleted', 'BOOLEAN')
-            .column('trip_id', 'STRING')
-            .column('route_id', 'STRING')
-            .column('start_time', 'STRING')
-            .column('start_date', 'STRING')
-            .column('stop_id', 'STRING')
-            .column('current_stop_sequence', 'INT')
-            .column('current_status', 'INT')
-            .column('event_timestamp', 'BIGINT')
-            .build()
+        .column("id", "STRING")
+        .column("is_deleted", "BOOLEAN")
+        .column("trip_id", "STRING")
+        .column("route_id", "STRING")
+        .column("start_time", "STRING")
+        .column("start_date", "STRING")
+        .column("stop_id", "STRING")
+        .column("current_stop_sequence", "INT")
+        .column("current_status", "INT")
+        .column("event_timestamp", "BIGINT")
+        .build(),
     )
-    t_env.create_temporary_view('parsed_vehicle', parsed_table)
+    t_env.create_temporary_view("parsed_vehicle", parsed_table)
 
     t_env.execute_sql("""
         CREATE TABLE processed_vehicle (
@@ -114,5 +134,5 @@ def log_processing():
         print("Writing records from Kafka to JDBC failed:", str(e))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     log_processing()

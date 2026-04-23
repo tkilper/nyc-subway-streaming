@@ -61,7 +61,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - |
         FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager        
+        jobmanager.rpc.address: jobmanager
+        classloader.check-leaked-classloader: false
   
   # Flink task manager
   taskmanager:
@@ -88,6 +89,7 @@ services:
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 15
         parallelism.default: 3
+        classloader.check-leaked-classloader: false
   postgres:
     image: postgres:14
     restart: on-failure
