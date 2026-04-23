@@ -1,0 +1,376 @@
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0 -- /opt/hostedtoolcache/Python/3.11.15/x64/bin/python
+cachedir: .pytest_cache
+rootdir: /home/runner/work/nyc-subway-streaming/nyc-subway-streaming
+configfile: pytest.ini
+collecting ... collected 35 items
+
+tests/test_anomaly_job.py::TestParseStopUpdates::test_yields_one_row_per_stop PASSED [  2%]
+tests/test_anomaly_job.py::TestParseStopUpdates::test_all_fields_extracted PASSED [  5%]
+tests/test_anomaly_job.py::TestParseStopUpdates::test_non_trip_update_yields_nothing PASSED [  8%]
+tests/test_anomaly_job.py::TestParseStopUpdates::test_stop_without_arrival_defaults_to_zero PASSED [ 11%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_output_has_nine_fields FAILED [ 14%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_output_fields_below_threshold FAILED [ 17%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_no_arima_below_min_observations FAILED [ 20%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_history_accumulates_across_calls FAILED [ 22%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_history_trimmed_to_max_observations FAILED [ 25%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_arima_runs_above_min_observations FAILED [ 28%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_arima_exception_suppressed FAILED [ 31%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_anomaly_detected_when_residual_exceeds_sigma FAILED [ 34%]
+tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_no_anomaly_when_residual_within_sigma FAILED [ 37%]
+tests/test_insert_job_update.py::TestParseEntity::test_yields_one_row_per_stop PASSED [ 40%]
+tests/test_insert_job_update.py::TestParseEntity::test_all_fields_extracted PASSED [ 42%]
+tests/test_insert_job_update.py::TestParseEntity::test_non_trip_update_entity_yields_nothing PASSED [ 45%]
+tests/test_insert_job_update.py::TestParseEntity::test_stop_without_arrival_or_departure_defaults_to_zero PASSED [ 48%]
+tests/test_insert_job_update.py::TestParseEntity::test_no_stops_yields_nothing PASSED [ 51%]
+tests/test_insert_job_vehicle.py::TestParseVehicle::test_yields_one_row_for_vehicle_entity PASSED [ 54%]
+tests/test_insert_job_vehicle.py::TestParseVehicle::test_all_fields_extracted PASSED [ 57%]
+tests/test_insert_job_vehicle.py::TestParseVehicle::test_non_vehicle_entity_yields_nothing PASSED [ 60%]
+tests/test_insert_job_vehicle.py::TestParseVehicle::test_vehicle_without_trip_uses_empty_strings PASSED [ 62%]
+tests/test_insert_job_vehicle.py::TestParseVehicle::test_is_deleted_flag PASSED [ 65%]
+tests/test_producer.py::TestPoll::test_vehicle_entity_sent_to_vehicle_topic PASSED [ 68%]
+tests/test_producer.py::TestPoll::test_trip_update_entity_sent_to_updates_topic PASSED [ 71%]
+tests/test_producer.py::TestPoll::test_mixed_feed_routes_to_both_topics PASSED [ 74%]
+tests/test_producer.py::TestPoll::test_producer_flushed_after_each_poll PASSED [ 77%]
+tests/test_producer.py::TestPoll::test_request_exception_retried_on_first_failure PASSED [ 80%]
+tests/test_producer.py::TestPoll::test_request_exception_on_both_tries_skips_poll PASSED [ 82%]
+tests/test_trip_tracking_job.py::TestParseVehicle::test_all_fields_extracted PASSED [ 85%]
+tests/test_trip_tracking_job.py::TestParseVehicle::test_non_vehicle_entity_yields_nothing PASSED [ 88%]
+tests/test_trip_tracking_job.py::TestParseVehicle::test_vehicle_without_trip_uses_empty_strings PASSED [ 91%]
+tests/test_trip_tracking_job.py::TestParseStopUpdates::test_yields_one_row_per_stop PASSED [ 94%]
+tests/test_trip_tracking_job.py::TestParseStopUpdates::test_all_fields_with_arrival_and_departure PASSED [ 97%]
+tests/test_trip_tracking_job.py::TestParseStopUpdates::test_stop_without_delays_defaults_to_zero PASSED [100%]
+
+=================================== FAILURES ===================================
+_____________ TestARIMAnomalyDetector.test_output_has_nine_fields ______________
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e5090>
+
+    def test_output_has_nine_fields(self):
+        d = _make_detector()
+        rows = list(d.process_element(_make_value(), ctx=None))
+>       assert len(rows) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_anomaly_job.py:105: AssertionError
+__________ TestARIMAnomalyDetector.test_output_fields_below_threshold __________
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e56d0>
+
+    def test_output_fields_below_threshold(self):
+        # Output schema: trip_id, route_id, start_date, stop_id, stop_sequence,
+        # arrival_delay, predicted_delay, residual, is_anomaly
+        # Note: stop_id (3) and stop_sequence (4) are swapped vs parse_stop_updates output
+>       d = _make_detector()
+            ^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+_________ TestARIMAnomalyDetector.test_no_arima_below_min_observations _________
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e5d10>
+
+    def test_no_arima_below_min_observations(self):
+>       d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 2)))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+________ TestARIMAnomalyDetector.test_history_accumulates_across_calls _________
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e6390>
+
+    def test_history_accumulates_across_calls(self):
+>       d = _make_detector()
+            ^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+_______ TestARIMAnomalyDetector.test_history_trimmed_to_max_observations _______
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e6a90>
+
+    def test_history_trimmed_to_max_observations(self):
+>       d = _make_detector(prefill=list(range(MAX_OBSERVATIONS)))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+________ TestARIMAnomalyDetector.test_arima_runs_above_min_observations ________
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e7190>
+
+    def test_arima_runs_above_min_observations(self):
+        # Real ARIMA integration test — simple linear series so fit is stable
+        prefill = list(range(MIN_OBSERVATIONS - 1))
+>       d = _make_detector(prefill=prefill)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:147: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+___________ TestARIMAnomalyDetector.test_arima_exception_suppressed ____________
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e7890>
+
+    def test_arima_exception_suppressed(self):
+>       d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 1)))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+__ TestARIMAnomalyDetector.test_anomaly_detected_when_residual_exceeds_sigma ___
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5e7f90>
+
+    def test_anomaly_detected_when_residual_exceeds_sigma(self):
+>       d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 1)))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+______ TestARIMAnomalyDetector.test_no_anomaly_when_residual_within_sigma ______
+
+self = <test_anomaly_job.TestARIMAnomalyDetector object at 0x7f8b1a5f0710>
+
+    def test_no_anomaly_when_residual_within_sigma(self):
+>       d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 1)))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_anomaly_job.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_anomaly_job.py:52: in _make_detector
+    d = ARIMAnomalyDetector()
+        ^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock spec='str' id='140235654606416'>, args = (), kwargs = {}
+effect = <tuple_iterator object at 0x7f8b1a5c8040>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+>               result = next(effect)
+                         ^^^^^^^^^^^^
+E               StopIteration
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1185: StopIteration
+=========================== short test summary info ============================
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_output_has_nine_fields - assert 0 == 1
+ +  where 0 = len([])
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_output_fields_below_threshold - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_no_arima_below_min_observations - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_history_accumulates_across_calls - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_history_trimmed_to_max_observations - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_arima_runs_above_min_observations - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_arima_exception_suppressed - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_anomaly_detected_when_residual_exceeds_sigma - StopIteration
+FAILED tests/test_anomaly_job.py::TestARIMAnomalyDetector::test_no_anomaly_when_residual_within_sigma - StopIteration
+========================= 9 failed, 26 passed in 1.20s =========================
