@@ -1,6 +1,15 @@
+import numpy as np
+from unittest.mock import patch, MagicMock
 from google.transit import gtfs_realtime_pb2
-from src.job.anomaly_job import parse_stop_updates, DELAY_THRESHOLD_SECONDS
+from src.job.anomaly_job import (
+    parse_stop_updates,
+    ARIMAnomalyDetector,
+    MIN_OBSERVATIONS,
+    MAX_OBSERVATIONS,
+)
 
+
+# ── parse_stop_updates helpers ────────────────────────────────────────────────
 
 def _to_iso(entity):
     return entity.SerializeToString().decode('latin-1')
@@ -21,6 +30,39 @@ def _make_update_entity(trip_id="T1", route_id="R1", start_date="20240101", stop
     return entity
 
 
+# ── ARIMAnomalyDetector helpers ───────────────────────────────────────────────
+
+class _ListState:
+    def __init__(self):
+        self._items = []
+
+    def get(self):
+        return iter(self._items)
+
+    def update(self, lst):
+        self._items = list(lst)
+
+
+class _RuntimeContext:
+    def get_list_state(self, _):
+        return _ListState()
+
+
+def _make_detector(prefill=None):
+    d = ARIMAnomalyDetector()
+    d.open(_RuntimeContext())
+    if prefill:
+        d._history.update(prefill)
+    return d
+
+
+def _make_value(trip_id="T1", route_id="R1", start_date="20240101",
+                stop_sequence=1, stop_id="S1", arrival_delay=60):
+    return (trip_id, route_id, start_date, stop_sequence, stop_id, arrival_delay)
+
+
+# ── Tests: parse_stop_updates ─────────────────────────────────────────────────
+
 class TestParseStopUpdates:
     def test_yields_one_row_per_stop(self):
         entity = _make_update_entity(stops=[
@@ -35,12 +77,12 @@ class TestParseStopUpdates:
             stops=[{'stop_sequence': 5, 'stop_id': 'S5', 'arrival_delay': 300}],
         )
         row = list(parse_stop_updates(_to_iso(entity)))[0]
-        assert row[0] == "T1"        # trip_id
-        assert row[1] == "R1"        # route_id
-        assert row[2] == "20240101"  # start_date
-        assert row[3] == 5           # stop_sequence
-        assert row[4] == "S5"        # stop_id
-        assert row[5] == 300         # arrival_delay
+        assert row[0] == "T1"
+        assert row[1] == "R1"
+        assert row[2] == "20240101"
+        assert row[3] == 5
+        assert row[4] == "S5"
+        assert row[5] == 300
 
     def test_non_trip_update_yields_nothing(self):
         entity = gtfs_realtime_pb2.FeedEntity()
@@ -51,9 +93,88 @@ class TestParseStopUpdates:
     def test_stop_without_arrival_defaults_to_zero(self):
         entity = _make_update_entity(stops=[{'stop_sequence': 1, 'stop_id': 'S1'}])
         row = list(parse_stop_updates(_to_iso(entity)))[0]
-        assert row[5] == 0  # arrival_delay
+        assert row[5] == 0
 
 
-class TestDelayThreshold:
-    def test_threshold_is_5_minutes_in_seconds(self):
-        assert DELAY_THRESHOLD_SECONDS == 300
+# ── Tests: ARIMAnomalyDetector ────────────────────────────────────────────────
+
+class TestARIMAnomalyDetector:
+    def test_output_has_nine_fields(self):
+        d = _make_detector()
+        rows = list(d.process_element(_make_value(), ctx=None))
+        assert len(rows) == 1
+        assert len(rows[0]) == 9
+
+    def test_output_fields_below_threshold(self):
+        # Output schema: trip_id, route_id, start_date, stop_id, stop_sequence,
+        # arrival_delay, predicted_delay, residual, is_anomaly
+        # Note: stop_id (3) and stop_sequence (4) are swapped vs parse_stop_updates output
+        d = _make_detector()
+        row = list(d.process_element(_make_value(arrival_delay=120), ctx=None))[0]
+        assert row[0] == "T1"
+        assert row[1] == "R1"
+        assert row[2] == "20240101"
+        assert row[3] == "S1"
+        assert row[4] == 1
+        assert row[5] == 120
+        assert row[6] is None   # predicted_delay — not computed below threshold
+        assert row[7] is None   # residual
+        assert row[8] is False  # is_anomaly
+
+    def test_no_arima_below_min_observations(self):
+        d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 2)))
+        row = list(d.process_element(_make_value(arrival_delay=100), ctx=None))[0]
+        assert row[6] is None
+        assert row[7] is None
+        assert row[8] is False
+
+    def test_history_accumulates_across_calls(self):
+        d = _make_detector()
+        for delay in [10, 20, 30]:
+            list(d.process_element(_make_value(arrival_delay=delay), ctx=None))
+        assert list(d._history.get()) == [10, 20, 30]
+
+    def test_history_trimmed_to_max_observations(self):
+        d = _make_detector(prefill=list(range(MAX_OBSERVATIONS)))
+        list(d.process_element(_make_value(arrival_delay=999), ctx=None))
+        stored = list(d._history.get())
+        assert len(stored) == MAX_OBSERVATIONS
+        assert stored[-1] == 999
+
+    def test_arima_runs_above_min_observations(self):
+        # Real ARIMA integration test — simple linear series so fit is stable
+        prefill = list(range(MIN_OBSERVATIONS - 1))
+        d = _make_detector(prefill=prefill)
+        row = list(d.process_element(_make_value(arrival_delay=50), ctx=None))[0]
+        assert row[6] is not None  # predicted_delay computed
+        assert row[7] is not None  # residual computed
+
+    def test_arima_exception_suppressed(self):
+        d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 1)))
+        with patch('statsmodels.tsa.arima.model.ARIMA', side_effect=Exception("fit failed")):
+            row = list(d.process_element(_make_value(arrival_delay=500), ctx=None))[0]
+        assert row[6] is None
+        assert row[7] is None
+        assert row[8] is False
+
+    def test_anomaly_detected_when_residual_exceeds_sigma(self):
+        d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 1)))
+        mock_fit = MagicMock()
+        mock_fit.forecast.return_value = np.array([100.0])
+        mock_fit.resid = np.array([1.0, -1.0, 1.0, -1.0])  # std = 1.0
+        with patch('statsmodels.tsa.arima.model.ARIMA') as mock_arima:
+            mock_arima.return_value.fit.return_value = mock_fit
+            # residual = |200 - 100| = 100 > 3.0 * 1.0 → anomaly
+            row = list(d.process_element(_make_value(arrival_delay=200), ctx=None))[0]
+        assert row[8] is True
+
+    def test_no_anomaly_when_residual_within_sigma(self):
+        d = _make_detector(prefill=list(range(MIN_OBSERVATIONS - 1)))
+        mock_fit = MagicMock()
+        mock_fit.forecast.return_value = np.array([100.0])
+        mock_fit.resid = np.array([10.0, -10.0, 10.0, -10.0])  # std = 10.0
+        with patch('statsmodels.tsa.arima.model.ARIMA') as mock_arima:
+            mock_arima.return_value.fit.return_value = mock_fit
+            # residual = |102 - 100| = 2 < 3.0 * 10.0 → no anomaly
+            row = list(d.process_element(_make_value(arrival_delay=102), ctx=None))[0]
+        assert row[8] is False
