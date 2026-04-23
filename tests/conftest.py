@@ -20,6 +20,7 @@ def pytest_configure(config):
         'pyflink.datastream',
         'pyflink.datastream.connectors',
         'pyflink.datastream.connectors.kafka',
+        'pyflink.datastream.state',
         'pyflink.common.serialization',
         'pyflink.common.typeinfo',
         'pyflink.common.watermark_strategy',
