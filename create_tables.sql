@@ -33,16 +33,17 @@ CREATE TABLE trip_delay_anomalies (
     trip_id VARCHAR,
     route_id VARCHAR,
     start_date VARCHAR,
-    window_start TIMESTAMP,
-    window_end TIMESTAMP,
-    avg_arrival_delay DOUBLE PRECISION,
-    max_arrival_delay INT,
-    stop_count BIGINT,
+    stop_id VARCHAR,
+    stop_sequence INT,
+    arrival_delay INT,
+    predicted_delay DOUBLE PRECISION,
+    residual DOUBLE PRECISION,
     is_anomaly BOOLEAN
 );
 
--- Populated by anomaly_job.py — 5-minute tumbling windows per trip.
--- is_anomaly = true when max_arrival_delay > 300 seconds (5 min).
+-- Populated by anomaly_job.py — one row per stop event, keyed by route_id.
+-- ARIMA(1,1,1) is fit on a rolling 200-observation history per route.
+-- is_anomaly = true when |arrival_delay - predicted_delay| > 3 * std(residuals).
 
 CREATE TABLE trip_tracking (
     trip_id VARCHAR,

@@ -1,4 +1,4 @@
-.PHONY: build up down job aggregation_job stop start tables all_jobs cancel_jobs reset_volumes
+.PHONY: build up down job aggregation_job stop start tables all_jobs cancel_jobs reset_volumes dashboard
 
 build:
 	docker compose build
@@ -35,6 +35,9 @@ tables:
 
 reset_volumes:
 	docker compose down --volumes --remove-orphans
+
+dashboard:
+	cd dashboard && pip install -q -r requirements.txt && python -m streamlit run app.py
 
 stop:
 	docker compose stop
