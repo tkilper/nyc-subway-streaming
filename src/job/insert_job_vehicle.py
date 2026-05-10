@@ -1,3 +1,5 @@
+import os
+
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
 from pyflink.common.serialization import SimpleStringSchema
@@ -5,6 +7,10 @@ from pyflink.common.typeinfo import Types
 from pyflink.common.watermark_strategy import WatermarkStrategy
 from pyflink.table import EnvironmentSettings, StreamTableEnvironment, Schema
 from pyflink.common import Row
+
+PG_URL = os.environ.get("POSTGRES_URL", "jdbc:postgresql://postgres:5432/postgres")
+PG_USER = os.environ.get("POSTGRES_USER", "postgres")
+PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
 
 
 def parse_vehicle(iso_string):
@@ -100,7 +106,7 @@ def log_processing():
     )
     t_env.create_temporary_view("parsed_vehicle", parsed_table)
 
-    t_env.execute_sql("""
+    t_env.execute_sql(f"""
         CREATE TABLE processed_vehicle (
             id VARCHAR,
             is_deleted BOOLEAN,
@@ -114,10 +120,10 @@ def log_processing():
             event_timestamp BIGINT
         ) WITH (
             'connector' = 'jdbc',
-            'url' = 'jdbc:postgresql://postgres:5432/postgres',
+            'url' = '{PG_URL}',
             'table-name' = 'processed_vehicle',
-            'username' = 'postgres',
-            'password' = 'postgres',
+            'username' = '{PG_USER}',
+            'password' = '{PG_PASSWORD}',
             'driver' = 'org.postgresql.Driver'
         )
     """)

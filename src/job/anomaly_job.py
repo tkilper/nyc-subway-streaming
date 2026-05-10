@@ -1,3 +1,5 @@
+import os
+
 from pyflink.datastream import StreamExecutionEnvironment, KeyedProcessFunction, RuntimeContext
 from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
 from pyflink.common.serialization import SimpleStringSchema
@@ -11,6 +13,10 @@ MIN_OBSERVATIONS = 50
 MAX_OBSERVATIONS = 200
 ARIMA_ORDER = (1, 1, 1)
 ANOMALY_SIGMA = 3.0
+
+PG_URL = os.environ.get("POSTGRES_URL", "jdbc:postgresql://postgres:5432/postgres")
+PG_USER = os.environ.get("POSTGRES_USER", "postgres")
+PG_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
 
 
 def parse_stop_updates(iso_string):
@@ -144,7 +150,7 @@ def run():
     )
     t_env.create_temporary_view("arima_results", result_table)
 
-    t_env.execute_sql("""
+    t_env.execute_sql(f"""
         CREATE TABLE trip_delay_anomalies (
             trip_id VARCHAR,
             route_id VARCHAR,
@@ -157,10 +163,10 @@ def run():
             is_anomaly BOOLEAN
         ) WITH (
             'connector' = 'jdbc',
-            'url' = 'jdbc:postgresql://postgres:5432/postgres',
+            'url' = '{PG_URL}',
             'table-name' = 'trip_delay_anomalies',
-            'username' = 'postgres',
-            'password' = 'postgres',
+            'username' = '{PG_USER}',
+            'password' = '{PG_PASSWORD}',
             'driver' = 'org.postgresql.Driver'
         )
     """)

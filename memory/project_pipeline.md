@@ -8,8 +8,8 @@ type: project
 
 - **Broker**: Redpanda (Kafka-compatible) — `redpanda-1:29092` internal, `localhost:9092` external
 - **Stream processor**: Apache Flink 1.20.2 (PyFlink), jobmanager UI at `localhost:8081`
-- **Database**: Postgres 14 at `localhost:5432` — db/user/password all `postgres`
-- **Producer**: `src/producers/send_mta_data.py` — runs on host, polls MTA GTFS-RT ACE feed every 30s, publishes to `updates-data` and `vehicle-data` topics
+- **Database**: Postgres 14 at `localhost:5432` — db/user/password all `postgres` (dev defaults). Flink jobs read `POSTGRES_URL`/`POSTGRES_USER`/`POSTGRES_PASSWORD` env (defaults `jdbc:postgresql://postgres:5432/postgres` + `postgres`/`postgres`); dashboard reads `POSTGRES_HOST`/`POSTGRES_PORT`/`POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD`. No real secrets in the repo; `.claude/settings.local.json` and `*:Zone.Identifier` are gitignored.
+- **Producer**: `src/producers/send_mta_data.py` — runs on host (`make producer`), polls all 8 MTA GTFS-RT subway feeds (`FEED_URLS`: numbered lines, ACE, BDFM, G, JZ, NQRW, L, SIR) every 30s, publishes to `updates-data` and `vehicle-data` topics. A feed that fails twice in a row is skipped for that poll; the others still publish.
 
 ## Flink Jobs (all in `src/job/`)
 
@@ -41,6 +41,7 @@ type: project
 |---|---|
 | `make up` | Build and start all Docker services |
 | `make down` | Stop and remove containers |
+| `make producer` | Run the host-side MTA producer (`python -m src.producers.send_mta_data`) |
 | `make tables` | Run `create_tables.sql` against Postgres |
 | `make all_jobs` | Submit all 4 Flink jobs (single docker exec session) |
 | `make cancel_jobs` | Cancel all running Flink jobs |
@@ -52,7 +53,8 @@ type: project
 - Streamlit app, runs at `localhost:8501` via `make dashboard`
 - Two tabs: **Live Trips** and **Anomaly Detection**
 - Both use `@st.fragment(run_every=30)` for independent 30s auto-refresh
-- Live Trips: active trip count, route count metrics; active trips by route table; full trip table with status, delay, time to next stop
+- Title: "NYC MTA Subway Trip Tracking and Alerts - All Lines"
+- Live Trips: route multiselect filter (empty = all routes); active trip count, route count metrics; active trips by route table; full trip table with status, delay, time to next stop
 - Anomaly Detection: events/scored/anomaly metrics; flagged anomalies table; all scored events expander; anomalies by route bar chart
 - Connects directly to Postgres on `localhost:5432`
 
