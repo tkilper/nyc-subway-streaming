@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime
 
@@ -13,7 +14,11 @@ st.set_page_config(
 )
 
 DB = dict(
-    host="localhost", port=5432, dbname="postgres", user="postgres", password="postgres"
+    host=os.environ.get("POSTGRES_HOST", "localhost"),
+    port=int(os.environ.get("POSTGRES_PORT", "5432")),
+    dbname=os.environ.get("POSTGRES_DB", "postgres"),
+    user=os.environ.get("POSTGRES_USER", "postgres"),
+    password=os.environ.get("POSTGRES_PASSWORD", "postgres"),
 )
 
 STATUS_LABEL = {0: "Approaching", 1: "At Stop", 2: "In Transit"}
@@ -90,7 +95,7 @@ def fmt_eta(scheduled_arrival, arrival_delay) -> str:
 
 # ── Page header ──────────────────────────────────────────────────────────────
 
-st.title("🚇 NYC MTA Subway Trip Tracking and Alerts - ACE lines")
+st.title("🚇 NYC MTA Subway Trip Tracking and Alerts - All Lines")
 
 tab_trips, tab_anomaly = st.tabs(["Live Trips", "Anomaly Detection"])
 
@@ -109,6 +114,15 @@ def render_trips():
 
     if df.empty:
         st.info("No trip data yet — make sure the trip_tracking_job is running.")
+        return
+
+    # route filter (empty selection == all routes)
+    all_routes = sorted(df["route_id"].dropna().unique().tolist())
+    chosen = st.multiselect("Filter by route (leave empty for all)", all_routes, key="route_filter")
+    if chosen:
+        df = df[df["route_id"].isin(chosen)]
+    if df.empty:
+        st.info("No trips for the selected routes.")
         return
 
     # summary metrics

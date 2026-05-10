@@ -1,0 +1,52 @@
+.PHONY: build up down producer stop start tables all_jobs cancel_jobs reset_volumes dashboard \
+	insert_update_job insert_vehicle_job trip_tracking_job anomaly_job
+
+build:
+	docker compose build
+
+# Runs on the host (not in Docker); ingests every NYC subway GTFS-realtime feed
+# into the vehicle-data / updates-data Kafka topics.
+producer:
+	python -m src.producers.send_mta_data
+
+up:
+	docker compose up --build --remove-orphans -d
+
+down:
+	docker compose down --remove-orphans
+
+insert_update_job:
+	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/insert_job_update.py --pyFiles /opt/src -d
+
+insert_vehicle_job:
+	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/insert_job_vehicle.py --pyFiles /opt/src -d
+
+trip_tracking_job:
+	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/trip_tracking_job.py --pyFiles /opt/src -d
+
+anomaly_job:
+	docker compose exec jobmanager ./bin/flink run -py /opt/src/job/anomaly_job.py --pyFiles /opt/src -d
+
+all_jobs:
+	docker compose exec --detach jobmanager ./bin/flink run -py /opt/src/job/insert_job_update.py --pyFiles /opt/src
+	docker compose exec --detach jobmanager ./bin/flink run -py /opt/src/job/insert_job_vehicle.py --pyFiles /opt/src
+	docker compose exec --detach jobmanager ./bin/flink run -py /opt/src/job/trip_tracking_job.py --pyFiles /opt/src
+	docker compose exec --detach jobmanager ./bin/flink run -py /opt/src/job/anomaly_job.py --pyFiles /opt/src
+
+cancel_jobs:
+	docker compose exec jobmanager bash -c "./bin/flink list -r 2>/dev/null | grep -oE '[0-9a-f]{32}' | xargs -r -I{} ./bin/flink cancel {}"
+
+tables:
+	docker compose exec -T postgres psql -U postgres -d postgres -f - < create_tables.sql
+
+reset_volumes:
+	docker compose down --volumes --remove-orphans
+
+dashboard:
+	cd dashboard && pip install -q -r requirements.txt && python -m streamlit run app.py
+
+stop:
+	docker compose stop
+
+start:
+	docker compose start
